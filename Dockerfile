@@ -1,18 +1,4 @@
-# ===== 1. Frontend Build =====
-FROM node:24-alpine AS frontend-build
-
-WORKDIR /app
-
-# Install dependencies
-COPY package*.json ./
-RUN npm ci
-
-COPY . .
-RUN npm run build
-
-
-
-# ===== 2. Python Build =====
+# ===== 1. Python Build =====
 FROM python:3.14-alpine3.24 AS backend-build
 
 WORKDIR /app
@@ -27,8 +13,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 
-
-# ===== 3. Final Runtime Image =====
+# ===== 2. Final Runtime Image =====
 FROM nginx:alpine3.24
 
 WORKDIR /app
@@ -44,8 +29,9 @@ RUN apk add --no-cache tini supervisor ffmpeg
 COPY --from=backend-build /usr/local/lib/python3.14 /usr/local/lib/python3.14
 COPY --from=backend-build /usr/local/bin /usr/local/bin
 
-# Copy frontend build artifacts to Nginx html directory
-COPY --from=frontend-build /app/build/client /usr/share/nginx/html
+# Copy frontend build artifacts
+# npm run build has already been run in the frontend build stage, so we can copy the build artifacts directly
+COPY build/client /usr/share/nginx/html
 
 # Nginx Entry Point
 COPY nginx_entrypoint.sh /usr/local/bin/nginx_entrypoint.sh

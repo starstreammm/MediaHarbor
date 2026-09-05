@@ -30,8 +30,6 @@ export function useStatus() {
         retry: 0,
         refetchInterval: 8000,
         refetchIntervalInBackground: true,
-
-        enabled: typeof window !== "undefined",
     });
 
     return query;

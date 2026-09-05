@@ -3,6 +3,7 @@
 .env
 cache/
 docker-compose.override.yaml
+Dockerfile.override
 
 # Node modules
 /node_modules/
