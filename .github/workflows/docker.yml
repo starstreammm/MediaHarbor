@@ -48,8 +48,8 @@ jobs:
         run: |
           TAG=${GITHUB_REF#refs/tags/}
 
-          DOCKERHUB_IMAGE=starstreammm/MediaHarbor
-          GHCR_IMAGE=ghcr.io/starstreammm/MediaHarbor
+          DOCKERHUB_IMAGE=starstreammm/mediaharbor
+          GHCR_IMAGE=ghcr.io/starstreammm/mediaharbor
 
           TAGS="$DOCKERHUB_IMAGE:$TAG,$GHCR_IMAGE:$TAG"
 
