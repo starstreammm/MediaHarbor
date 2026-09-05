@@ -1,0 +1,3 @@
+[submodule "api/apis/Douyin"]
+	path = api/apis/Douyin
+	url = git@github.com:Evil0ctal/Douyin_TikTok_Download_API.git

@@ -1,0 +1,54 @@
+services:
+  mediaharbor:
+    image: starstreammm/mediaharbor:latest
+    container_name: mediaharbor
+    restart: unless-stopped
+
+    ports:
+      - "8888:80"
+
+    volumes:
+      - /path/to/data:/data
+      - /path/to/cache:/app/cache
+      # - /path/to/certs:/etc/nginx/certs:ro # Optional
+
+    networks:
+      - mediaharbor-net
+
+    depends_on:
+      - postgres
+      - aria2
+
+  aria2:
+    image: p3terx/aria2-pro:latest
+    container_name: aria2
+    restart: unless-stopped
+
+    environment:
+      - RPC_SECRET=mediaharbor
+
+    volumes:
+      - /path/to/data:/data
+
+    networks:
+      - mediaharbor-net
+
+  postgres:
+    image: postgres:18
+    container_name: postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: mediaharbor
+      POSTGRES_DB: mediaharbor
+
+    volumes:
+      - /path/to/postgres:/var/lib/postgresql
+
+    networks:
+      - mediaharbor-net
+
+networks:
+  mediaharbor-net:
+    driver: bridge
