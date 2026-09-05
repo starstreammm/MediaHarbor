@@ -338,11 +338,14 @@ export default function Init() {
                                             </ListItem>
                                         ))}
                                     </List>
-                                    <NextButton onClick={() => {
-                                        api.get("/api/init/base")
-                                            .then(() => refetch())
-                                            .catch((e) => pushError(e, "Init Base Services"));
-                                    }} label="Retry" />
+                                    <NextButton
+                                        onClick={() => {
+                                            api.get("/api/init/base")
+                                                .then(() => refetch())
+                                                .catch((e) => pushError(e, "Init Base Services"));
+                                        }}
+                                        label="Retry"
+                                    />
                                 </Collapse>
                             </ListItem>
                         </List>
