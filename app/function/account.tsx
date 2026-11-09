@@ -6,22 +6,16 @@ import type {
     ApiAccountSync,
     ApiAccountParse,
 } from "~/model/api";
-import type { DetailsAccount, DetailsPost, TablePost } from "~/model/table";
+import type { DetailsAccount, DetailsPost, TablePost, UrlsFile } from "~/model/table";
 import type { CursorGet, CursorRes, CursorFilter } from "~/model/cursor";
-import type { Platform } from "~/model/enum";
+import type { ApiUrlCheck } from "~/model/api";
 
 
-export async function checkUrl(url: string) {
+export async function checkUrl(url: string, signal?: AbortSignal): Promise<ApiUrlCheck> {
     try {
-        const res = await api.get("/api/account/check", { searchParams: { url } }).json<[string, [Platform, string] | null]>();
-        if (res[0] === "true") {
-            return res[1] ? res[1][0] : "Unknown platform";
-        }
-        else {
-            return res[0];
-        }
+        return await api.get("/api/account/check", { searchParams: { url }, signal }).json<ApiUrlCheck>();
     } catch (error) {
-        return "Error checking URL: " + (error as Error).message;
+        return { status: "error", message: "Error checking URL: " + (error as Error).message };
     }
 }
 
@@ -65,33 +59,39 @@ export async function syncSubmit(data: ApiAccountSync) {
     }
 }
 
-export async function getProfile(url: string) {
+export async function getProfile(url: string, signal?: AbortSignal) {
     try {
-        const res = await api.get("/api/account/profile/url", { searchParams: { url } }).json<DetailsAccount>();
+        // Allow URL resolution and Douyin's six guest attempts plus authenticated fallback.
+        const res = await api.get("/api/account/profile/url", {
+            searchParams: { url },
+            timeout: 270000,
+            signal,
+        }).json<DetailsAccount<UrlsFile>>();
         return res;
     } catch (error) {
-        pushError(error, "Get account profile");
+        if (!signal?.aborted) pushError(error, "Get account profile");
         throw error;
     }
 }
 
-export async function* getPostsFromUrl(url: string): AsyncGenerator<DetailsPost[]> {
+export async function* getPostsFromUrl(url: string, signal?: AbortSignal): AsyncGenerator<DetailsPost[]> {
     try {
         const decoder = new TextDecoder("utf-8");
         const reader = (
             await api.get("/api/account/posts/url", {
                 searchParams: { url },
-                timeout: false
+                timeout: false,
+                signal,
             })).body?.getReader();
         if (reader === undefined) {
             pushMsg("Response body is empty", "error");
             throw new Error("Response body is empty");
         }
 
-        let buffer = "";
+        try {
+            let buffer = "";
 
-        while (true) {
-            try {
+            while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -104,15 +104,17 @@ export async function* getPostsFromUrl(url: string): AsyncGenerator<DetailsPost[
                     yield JSON.parse(line) as DetailsPost[];
                 }
             }
-            catch (error) { pushError(error, "Get account posts"); }
-        }
 
-        buffer += decoder.decode();
-        if (buffer.trim()) {
-            yield JSON.parse(buffer) as DetailsPost[];
+            buffer += decoder.decode();
+            if (buffer.trim()) {
+                yield JSON.parse(buffer) as DetailsPost[];
+            }
+        } finally {
+            await reader.cancel();
+            reader.releaseLock();
         }
     } catch (error) {
-        pushError(error, "Get account posts");
+        if (!signal?.aborted) pushError(error, "Get account posts");
         throw error;
     }
 }

@@ -2,12 +2,16 @@ import type { AccountFilter } from "./cursor";
 import type { Platform } from "./enum";
 
 export interface TableSettings {
+    file_scan_cron: string;
     data_path: string;
     aria2_path: string;
 
     aria2_host: string;
     aria2_port: number;
     aria2_secret: string;
+
+    cookie_tiktok: string;
+    cookie_tiktok_date: string;
 
     cookie_douyin: string;
     cookie_douyin_date: string;
@@ -75,14 +79,19 @@ export interface TableCreator extends DetailsCreator {
     create_time: string; // ISO datetime string
 }
 
-export interface DetailsAccount {
+export interface UrlsFile {
+    urls: string[];
+    suffix: string;
+}
+
+export interface DetailsAccount<TFile = number> {
     platform?: Platform;
     pid?: string;
     url?: string;
     alias: string;
     overview: string;
-    avatar?: number | null;
-    cover?: number | null;
+    avatar?: TFile | null;
+    cover?: TFile | null;
     age?: number | null;
     gender?: boolean | null; // true male; false female
     ip?: string | null;
@@ -96,6 +105,7 @@ export interface TableAccount extends DetailsAccount {
     filter?: AccountFilter
     latest_update: string | null; // ISO datetime string
     sync_task: number | null;
+    sync_enabled: boolean;
     sync_status: boolean;
     create_time: string; // ISO datetime string
 }

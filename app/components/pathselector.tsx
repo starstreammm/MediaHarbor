@@ -22,7 +22,7 @@ import { pushError } from "~/components/error_popout";
 export default function PathSelector({
     label,
     onClose,
-    onEnter = () => { },
+    onEnter = onClose,
     value,
     addDir
 }: {
@@ -43,7 +43,7 @@ export default function PathSelector({
         return path.split('/').slice(0, -1).join('/') + "/" || "/";
     };
 
-    const standardizePath = async (path: string) => {
+    const standardizePath = (path: string) => {
         if (path.startsWith('"') && path.endsWith('"')) path = path.slice(1, -1);
         if (path.startsWith("'") && path.endsWith("'")) path = path.slice(1, -1);
         if (path === "") return "/";
@@ -74,8 +74,12 @@ export default function PathSelector({
             })
     };
 
-    const close_check = async (is_enter: boolean) => {
-        is_enter ? onEnter(path) : onClose(path);
+    const close_check = (is_enter: boolean) => {
+        if (!path.trim()) return;
+        const normalized = standardizePath(path.trim());
+        setPath(normalized);
+        onClose(normalized);
+        if (is_enter && onEnter !== onClose) onEnter(normalized);
     }
 
     const fetch_options = useMemo(() => {
@@ -88,9 +92,8 @@ export default function PathSelector({
     }, [path, pathList]);
 
     useEffect(() => {
-        if (value === path) return;
-        else { Promise.resolve(standardizePath(value ?? "/")).then(setPath); }
-    }, [, value]);
+        setPath(value ?? "/");
+    }, [value]);
 
     return (
         <>
@@ -157,11 +160,15 @@ export default function PathSelector({
                     <ArrowBackRoundedIcon color="primary" />
                 </IconButton>
                 <Autocomplete
+                    freeSolo
                     disableCloseOnSelect
                     disablePortal
                     value={path}
-                    onOpen={() => fetch(path)}
-                    onClose={() => close_check(false)}
+                    inputValue={path}
+                    onOpen={() => fetch(path.slice(0, path.lastIndexOf("/") + 1) || "/")}
+                    onClose={(_, reason) => {
+                        if (reason !== "selectOption") close_check(false);
+                    }}
                     onKeyDown={(e) => {
                         if (e.key === "Enter") {
                             e.preventDefault();
@@ -171,22 +178,13 @@ export default function PathSelector({
                     }}
                     options={fetch_options}
                     sx={{ width: "100%" }}
-                    onInputChange={async (_, value, reason) => {
-                        if (reason === "selectOption") {
-                            setPath(value);
-                            fetch(value);
-                        }
-                        else {
-
-                            if (value.startsWith(path.slice(0, path.lastIndexOf("/") + 1))) {
-                                setPath(value);
-                                fetch(value.slice(0, value.lastIndexOf("/") + 1));
-                            }
-                            else {
-                                const newPath = await standardizePath(value);
-                                setPath(newPath);
-                                fetch(newPath);
-                            }
+                    onInputChange={(_, value, reason) => {
+                        if (reason !== "input" && reason !== "selectOption" && reason !== "clear") return;
+                        setPath(value);
+                        onClose(value);
+                        if (value.startsWith("/")) {
+                            const directory = value.slice(0, value.lastIndexOf("/") + 1);
+                            fetch(directory);
                         }
                     }}
                     renderInput={(params) => <TextField

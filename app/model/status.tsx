@@ -6,12 +6,14 @@ export interface ModelHealthStatus {
     aria2: boolean | null;
     delete: boolean | null;
     queue: boolean | null;
-    apis?: boolean;
+    apis: boolean;
     base?: boolean;
 }
 
 export interface ApiHealthStatus {
+    [platform: string]: boolean | null | undefined;
     douyin: boolean | null;
+    tiktok?: boolean | null;
     bilibili: boolean | null;
     xhs: boolean | null;
     x: boolean | null;
@@ -28,6 +30,9 @@ export interface DatabaseConfig {
 }
 
 export interface TableStatistics {
+    post_counts?: Record<string, number>;
+    creator_counts?: Record<string, number>;
+    post_len_tiktok?: number;
     post_len_douyin: number;
     post_len_bilibili: number;
     post_len_xhs: number;

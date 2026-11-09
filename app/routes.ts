@@ -9,6 +9,7 @@ export default [
         route("/collections", "pages/collections/index.tsx"),
         route("/tasks", "pages/tasks/index.tsx"),
         route("/logs", "pages/logs.tsx"),
-        route("/settings", "pages/settings.tsx"),
+        route("/settings", "pages/settings/index.tsx"),
+        route("/api-health", "pages/api-health/index.tsx"),
     ]),
 ] satisfies RouteConfig;

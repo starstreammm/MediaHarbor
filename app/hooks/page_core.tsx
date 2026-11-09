@@ -7,11 +7,13 @@ import {
     Autocomplete,
     TextField,
     useMediaQuery,
+    Alert,
 } from "@mui/material";
 import FilterAltRoundedIcon from '@mui/icons-material/FilterAltRounded';
 import CleaningServicesRoundedIcon from '@mui/icons-material/CleaningServicesRounded';
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router";
 
 import type { CursorFilter, CursorGet, CursorRes, PageProps } from "~/model/cursor";
 import type { Layer } from "~/model/enum";
@@ -86,64 +88,90 @@ export default function PageCore<T>(
     const isUpMd = useMediaQuery((theme) => theme.breakpoints.up('md'), { noSsr: true });
     const [viewType, setViewType] = useLocalStorage<ViewType>(`${layer}_viewType`, "list", "local");
     const [openFilterEdit, setOpenFilterEdit] = useState(false);
+    const [searchParams, setSearchParams] = useSearchParams();
     const nextCursor = useRef<CursorGet>(DefaultCursor);
-    const [page, setPage] = useState<PageProps>(defaultPage);
+    const previousRequest = useRef<{ key: string; page: number } | null>(null);
+    const [localPage, setLocalPage] = useState<PageProps>(defaultPage);
+    const page = onChangePage ? defaultPage : localPage;
+    const setPage = (newPage: PageProps) => {
+        if (onChangePage) onChangePage(newPage);
+        else setLocalPage(newPage);
+    };
     const [total, setTotal] = useState(1);
 
-    // data
-    const [filter, setFilter] = useState<CursorFilter>({});
+    // Top-level searches live in the URL; embedded lists keep their own search.
+    const [localFilter, setLocalFilter] = useState<CursorFilter>({});
+    const query = onChangePage ? searchParams.get("q") ?? "" : "";
+    const filter = useMemo(() => onChangePage
+        ? { ...localFilter, search: query.split(/\s+/).filter(Boolean) }
+        : localFilter, [localFilter, query, Boolean(onChangePage)]);
     const [data, setData] = useState<T[]>([]);
+    const [error, setError] = useState<string | null>(null);
 
+    const setFilter = (newFilter: CursorFilter) => {
+        setLocalFilter(newFilter);
+        if (onChangePage) {
+            setSearchParams((prev) => {
+                const params = new URLSearchParams(prev);
+                const search = newFilter.search?.join(" ") ?? "";
+                if (search) params.set("q", search);
+                else params.delete("q");
+                params.set("page", "1");
+                return params;
+            });
+        } else {
+            setLocalPage((prev) => ({ ...prev, page: 1 }));
+        }
+    };
 
-
-    // Cursor Reset & Fetch
-    const fetchData = async (pageProp: PageProps) => {
-        const [total, res] = await Promise.all([
-            getTotalPages(filter),
-            getData(pageProp, filter),
-        ]);
-
-        setTotal(total ?? 1);
-
-        if (!res) return;
-        const { data, ...page } = res;
-        setData(data);
-        nextCursor.current = page;
-        setPage(pageProp);
-    }
-
-    // Fetch total pages and data when the component mounts
     useEffect(() => {
-        fetchData(page);
-        if (!isUpMd)
-            setViewType("grid");
+        if (!isUpMd) setViewType("grid");
     }, []);
 
-    // Any of the filter, per_page or  sort changes, reset the page to 1 and fetch new data
-    useEffect(() => { fetchData({ ...page, page: 1 }); }, [filter, page.sort, page.per_page]);
-
-    // Call onChangePage callback whenever the page state changes
-    useEffect(() => onChangePage?.(page), [page]);
-
-
+    useEffect(() => {
+        let cancelled = false;
+        const key = JSON.stringify([filter, page.sort, page.per_page]);
+        const previous = previousRequest.current;
+        const request = previous?.key === key && previous.page !== page.page
+            ? getPageChange(page.page, previous.page, nextCursor.current, page, filter)
+            : getData(page, filter);
+        setError(null);
+        Promise.all([getTotalPages(filter), request]).then(([total, result]) => {
+            if (cancelled || !result) return;
+            setTotal(total ?? 0);
+            setData(result.data);
+            nextCursor.current = result;
+            previousRequest.current = { key, page: page.page };
+        }).catch((error: unknown) => {
+            if (cancelled) return;
+            setData([]);
+            setTotal(0);
+            setError(error instanceof Error ? error.message : "Unable to load results.");
+        });
+        return () => { cancelled = true; };
+    }, [filter, page.page, page.sort, page.per_page]);
 
     return (
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
             {header}
-            <FilterSetter
-                open={openFilterEdit}
+            {openFilterEdit && <FilterSetter
+                open
+                value={filter}
                 setClose={() => setOpenFilterEdit(false)}
                 setValue={(newFilter) => setFilter(newFilter)}
                 layer={layer}
-            />
+            />}
 
-            <Box sx={{ display: "flex", justifyContent: "space-between", px: viewControlerPadding }}>
+            <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", gap: 1, px: viewControlerPadding }}>
                 <ViewTypeSelector
                     value={viewType}
                     onChange={(newValue) => setViewType(newValue)}
                 />
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <ResponsiveSearch onEnd={(values) => setFilter({ include: values })} />
+                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 1 }}>
+                    <ResponsiveSearch
+                        value={filter.search ?? []}
+                        onEnd={(search) => setFilter({ ...filter, search })}
+                    />
                     <IconButton onClick={() => setOpenFilterEdit(true)}>
                         <FilterAltRoundedIcon fontSize="small" />
                     </IconButton>
@@ -155,7 +183,7 @@ export default function PageCore<T>(
                     <Divider orientation="vertical" />
                     <SortModeSetter
                         mode={page.sort}
-                        setMode={(newSort) => setPage((prev) => ({ ...prev, sort: newSort }))}
+                        setMode={(newSort) => setPage({ ...page, page: 1, sort: newSort })}
                         layer={layer}
                     />
                     {moreControler}
@@ -163,6 +191,7 @@ export default function PageCore<T>(
             </Box>
             <Divider sx={{ mx: viewControlerPadding }} />
 
+            {error && <Alert severity="error">{error}</Alert>}
             <Box sx={{
                 display: "flex",
                 width: "100%",
@@ -189,20 +218,9 @@ export default function PageCore<T>(
                 gap: 3,
             }}>
                 <Pagination
-                    count={Math.ceil(total / page.per_page)}
+                    count={Math.max(1, Math.ceil(total / page.per_page))}
                     page={page.page}
-                    onChange={(_, newPage) => {
-                        if (newPage !== page.page) {
-                            getPageChange(newPage, page.page, nextCursor.current, page, filter)
-                                .then((res) => {
-                                    if (!res) return;
-                                    const { data, ...page } = res;
-                                    setData(data);
-                                    nextCursor.current = page;
-                                    setPage(((prev) => ({ ...prev, page: newPage })));
-                                })
-                        }
-                    }}
+                    onChange={(_, newPage) => setPage({ ...page, page: newPage })}
                     color="primary"
                 />
                 <Autocomplete
@@ -214,7 +232,7 @@ export default function PageCore<T>(
                     sx={{ width: 58 }}
                     onChange={(_, newValue) => {
                         if (newValue === null) return;
-                        setPage((prev) => ({ ...prev, per_page: newValue }));
+                        setPage({ ...page, page: 1, per_page: newValue });
                     }}
                     renderInput={(params) => <TextField {...params} variant="standard" />}
                 />

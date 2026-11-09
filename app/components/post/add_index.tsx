@@ -14,8 +14,8 @@ import { useColorScheme } from '@mui/material/styles';
 
 import { useState, useRef } from "react";
 
-import type { ApiPostInsert, ApiPostCreate, InsertRef } from "~/model/api";
-import { pushTaskSuccess } from "~/components/error_popout";
+import type { ApiPostInsert, ApiPostCreate, InsertRef, UrlCheckState } from "~/model/api";
+import { pushTaskSuccess, pushMsg } from "~/components/error_popout";
 import { createSubmit, checkUrl } from "~/function/post";
 import UrlInsert from "../url_list";
 import ManualInsert from "./manual";
@@ -30,7 +30,9 @@ export default function AddPostDialog({ onClose, resData }: {
     const preferIsLight = useMediaQuery("(prefers-color-scheme: light)");
     const [type, setType] = useState("from-url");
     const [loading, setLoading] = useState(false);
-    const [urls, setUrls] = useState<Record<string, string>>({});
+    const [urls, setUrls] = useState<Record<string, UrlCheckState>>({});
+    const validUrls = Object.keys(urls).filter((url) => urls[url].status === "passed");
+    const checking = Object.values(urls).some((result) => result.status === "checking");
     const insertRef = useRef<InsertRef<ApiPostInsert, number>>(null);
 
     return (
@@ -87,9 +89,10 @@ export default function AddPostDialog({ onClose, resData }: {
                     </Button>
                     <Button
                         onClick={() => {
+                            if (loading || (type === "from-url" && (validUrls.length === 0 || checking))) return;
                             if (resData) {
                                 if (type === "from-url") {
-                                    resData(Object.keys(urls).map((url) => ({ url })));
+                                    resData(validUrls.map((url) => ({ url })));
                                 }
                                 else {
                                     const data = insertRef.current?.resData();
@@ -101,22 +104,29 @@ export default function AddPostDialog({ onClose, resData }: {
                             else {
                                 setLoading(true);
                                 if (type === "from-url") {
-                                    Promise.allSettled(Object.keys(urls).map((url) => {
+                                    Promise.allSettled(validUrls.map((url) => {
                                         return createSubmit(url);
                                     }))
                                         .then((results) => {
-                                            const errors: Record<string, string> = {};
+                                            const errors: Record<string, UrlCheckState> = {};
                                             results.forEach((result, index) => {
                                                 if (result.status === "rejected") {
-                                                    errors[Object.keys(urls)[index]] = result.reason?.message ?? String(result.reason);
+                                                    errors[validUrls[index]] = { status: "error", message: result.reason?.message ?? String(result.reason) };
                                                 }
                                             });
-                                            if (Object.keys(errors).length === 0) {
-                                                const task_uids = results.map((result) => (result as PromiseFulfilledResult<number>).value);
-                                                onClose(task_uids);
-                                                pushTaskSuccess(`${task_uids.length} post(s) added from URLs successfully.`);
+                                            const task_uids = results.flatMap((result) => result.status === "fulfilled" ? [result.value] : []);
+                                            if (task_uids.length > 0) {
+                                                pushTaskSuccess(`${task_uids.length} post import task(s) submitted.`);
                                             }
-                                            else { setUrls(errors); }
+                                            if (Object.keys(errors).length === 0) {
+                                                onClose(task_uids);
+                                            }
+                                            else {
+                                                setUrls((previous) => ({
+                                                    ...Object.fromEntries(Object.entries(previous).filter(([url]) => !validUrls.includes(url))),
+                                                    ...errors,
+                                                }));
+                                            }
                                         })
                                         .finally(() => setLoading(false));
                                 }
@@ -124,14 +134,14 @@ export default function AddPostDialog({ onClose, resData }: {
                                     insertRef.current?.submit()
                                         .then((uid) => {
                                             onClose([uid]);
-                                            pushTaskSuccess(`Post added successfully. Task UID: ${uid}.`);
+                                            pushMsg(`Post added successfully. UID: ${uid}.`, "success");
                                         })
                                         .finally(() => setLoading(false));
                                 }
                             }
                         }}
                         variant="contained"
-                        disabled={type === "from-url" && Object.keys(urls).length === 0}
+                        disabled={type === "from-url" && (validUrls.length === 0 || checking)}
                         loading={loading}
                     >
                         Apply

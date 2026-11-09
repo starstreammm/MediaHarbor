@@ -1,18 +1,18 @@
-import { IconButton, Switch, Tooltip } from "@mui/material";
-import FilterAltRoundedIcon from '@mui/icons-material/FilterAltRounded';
+import { Chip, IconButton, Tooltip } from "@mui/material";
+import MoreVertRoundedIcon from "@mui/icons-material/MoreVertRounded";
 
 import {
     useState,
+    useEffect,
     forwardRef,
     useImperativeHandle,
     type ForwardedRef,
 } from "react";
 
 import type { AccountFilter } from "~/model/cursor";
-import type { ApiAccountCreate, InsertRef } from "~/model/api";
-import { Platform } from "~/model/enum";
+import type { ApiAccountCreate, InsertRef, UrlCheckState } from "~/model/api";
 import UrlInsert from "../url_list";
-import { AccountFilterDialog } from "./filter";
+import { AccountSyncDialog } from "./sync_settings";
 import { checkUrl, createSubmit } from "../../function/account";
 
 export default forwardRef(UrlsInsert);
@@ -20,24 +20,34 @@ export default forwardRef(UrlsInsert);
 function UrlsInsert(
     {
         open,
+        onReady,
         creator_uid = -1,
     }: {
         open: boolean;
+        onReady?: (ready: boolean) => void;
         creator_uid?: number;
     },
     ref: ForwardedRef<InsertRef<ApiAccountCreate[], number[]>>,
 ) {
     // data
-    const [urls, setUrls] = useState<Record<string, string>>({});
+    const [urls, setUrls] = useState<Record<string, UrlCheckState>>({});
     const [filters, setFilters] = useState<Record<string, AccountFilter>>({});
     const [sync, setSync] = useState<Record<string, boolean>>({});
 
     // state
     const [openFilter, setOpenFilter] = useState("");
 
+    const ready = open && Object.values(urls).some((result) => result.status === "passed")
+        && !Object.values(urls).some((result) => result.status === "checking");
+
+    useEffect(() => {
+        onReady?.(ready);
+    }, [onReady, ready]);
+
     useImperativeHandle(ref, () => ({
         resData() {
-            const url_list = Object.keys(urls).filter((url) => Platform.includes(urls[url] as Platform));
+            if (!ready) throw new Error("Add at least one valid account and wait for URL checks to finish.");
+            const url_list = Object.keys(urls).filter((url) => urls[url].status === "passed");
             return url_list.map((url) => ({
                 url,
                 creator_uid,
@@ -46,7 +56,8 @@ function UrlsInsert(
             }));
         },
         submit() {
-            const url_list = Object.keys(urls).filter((url) => Platform.includes(urls[url] as Platform));
+            if (!ready) throw new Error("Add at least one valid account and wait for URL checks to finish.");
+            const url_list = Object.keys(urls).filter((url) => urls[url].status === "passed");
             const tasks = url_list.map((url) => ({
                 url,
                 creator_uid,
@@ -62,16 +73,13 @@ function UrlsInsert(
     return (
         <>
             {openFilter &&
-                <AccountFilterDialog
-                    filter={filters[openFilter] ?? {}}
-                    onClose={(filter) => {
-                        setOpenFilter("");
-                        if (filter !== null) {
-                            setFilters((prev) => ({
-                                ...prev,
-                                [openFilter]: filter,
-                            }));
-                        }
+                <AccountSyncDialog
+                    defaultEnabled={sync[openFilter] !== false}
+                    defaultFilter={filters[openFilter] ?? {}}
+                    onClose={() => setOpenFilter("")}
+                    onSave={(enabled, filter) => {
+                        setSync((previous) => ({ ...previous, [openFilter]: enabled }));
+                        setFilters((previous) => ({ ...previous, [openFilter]: filter }));
                     }}
                 />
             }
@@ -82,11 +90,16 @@ function UrlsInsert(
                 checkUrl={checkUrl}
                 optional={(url) => (
                     <>
-                        <IconButton onClick={() => setOpenFilter(url)} disabled={sync[url] === false}>
-                            <FilterAltRoundedIcon />
-                        </IconButton>
-                        <Tooltip title="Auto Sync">
-                            <Switch onChange={(e) => setSync({ ...sync, [url]: e.target.checked })} />
+                        <Chip
+                            size="small"
+                            variant="outlined"
+                            color={sync[url] !== false ? "success" : "default"}
+                            label={sync[url] !== false ? "Auto sync on" : "Auto sync off"}
+                        />
+                        <Tooltip title="Sync settings">
+                            <IconButton aria-label="Edit sync settings" onClick={() => setOpenFilter(url)}>
+                                <MoreVertRoundedIcon />
+                            </IconButton>
                         </Tooltip>
                     </>
                 )}

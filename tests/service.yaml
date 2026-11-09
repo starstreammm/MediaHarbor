@@ -1,0 +1,58 @@
+x-config:
+    timezone: &timezone Asia/Shanghai
+    token: &token mediaharbor
+
+services:
+    postgres:
+        image: postgres:18-trixie
+        container_name: mediaharbor-postgres
+        restart: unless-stopped
+        ports:
+            - "5432:5432"
+
+        environment:
+            TZ: *timezone
+            POSTGRES_USER: admin
+            POSTGRES_DB: mediaharbor
+            POSTGRES_PASSWORD: *token
+
+        healthcheck:
+            test:
+                - "CMD-SHELL"
+                - 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"'
+            interval: 3m
+            timeout: 3s
+            retries: 3
+            start_period: 33s
+            start_interval: 3s
+
+    aria2:
+        image: p3terx/aria2-pro:latest
+        container_name: mediaharbor-aria2
+        restart: unless-stopped
+        ports:
+            - "6800:6800"
+
+        environment:
+            TZ: *timezone
+            RPC_SECRET: *token
+            IPV6_MODE: "true"
+            RPC_PORT: 6800
+
+        volumes:
+            - "./temp/data:/data"
+
+        healthcheck:
+            test:
+                - CMD-SHELL
+                - >-
+                    curl -fsS --max-time 3
+                    -H 'Content-Type: application/json'
+                    -d "{\"jsonrpc\":\"2.0\",\"id\":\"health\",\"method\":\"aria2.getVersion\",\"params\":[\"token:$${RPC_SECRET}\"]}"
+                    http://127.0.0.1:6800/jsonrpc
+                    | grep -q '"result"'
+            interval: 3m
+            timeout: 3s
+            retries: 3
+            start_period: 33s
+            start_interval: 3s

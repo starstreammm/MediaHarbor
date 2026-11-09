@@ -15,6 +15,7 @@ import UploadFileRoundedIcon from '@mui/icons-material/UploadFileRounded';
 
 import {
     useState,
+    useEffect,
     forwardRef,
     useImperativeHandle,
     type ForwardedRef,
@@ -35,18 +36,22 @@ export default forwardRef(ManualInsert);
 function ManualInsert(
     {
         open,
+        onReady,
         setType,
         defaultValue = { creator_uid: -1 } as ApiAccountInsert
     }: {
         open: boolean;
+        onReady?: (ready: boolean) => void;
         setType?: Dispatch<SetStateAction<string>>;
         defaultValue?: ApiAccountInsert;
     },
     ref: ForwardedRef<InsertRef<ApiAccountInsert, number>>,
 ) {
-    if (!open) return null;
-
     const [insert, setInsert] = useState<ApiAccountInsert>(defaultValue);
+
+    useEffect(() => {
+        onReady?.(Boolean(open && insert.alias && insert.overview));
+    }, [open, insert.alias, insert.overview, onReady]);
 
     useImperativeHandle(ref, () => ({
         resData() {
@@ -68,6 +73,8 @@ function ManualInsert(
             }
         },
     }));
+
+    if (!open) return null;
 
     return (
         <>

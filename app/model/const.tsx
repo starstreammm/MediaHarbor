@@ -1,5 +1,5 @@
-export const VERSION = "1.0.0"
+export const VERSION = "0.1.0-rc1";
 
-export const urlRegex = /https?:\/\/[^\s/$.?#].[^\s]*/gi;
+export const urlRegex = /https?:\/\/[^\s?#]+/gi;
 
-export type FileType = "image" | "video" | "unknown"
+export type FileType = "image" | "video" | "unknown";

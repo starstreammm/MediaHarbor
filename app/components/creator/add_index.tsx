@@ -10,7 +10,6 @@ import {
     Stepper,
     Step,
     StepLabel,
-    MobileStepper,
     Typography,
     Divider,
 } from "@mui/material";
@@ -39,6 +38,7 @@ export default function AddCreatorDialog({ onClose }: {
     ];
 
     // state
+    const [firstReady, setFirstReady] = useState(false);
     const [loading, setLoading] = useState(false);
     const [activeStep, setActiveStep] = useState(0);
     const setpRef = useRef<InsertRef<ApiCreatorCreate, void>>(null);
@@ -47,12 +47,32 @@ export default function AddCreatorDialog({ onClose }: {
     const [insert, setInsert] = useState<ApiCreatorCreate>({} as ApiCreatorCreate);
 
     // Handle Next and Back
-    const handleNext = () => {
+    const handleNext = async () => {
+        if (loading) return;
         if (activeStep === 0) {
-            const data = setpRef.current?.resData();
-            if (!data) { return; }
-            setInsert(data);
-            setActiveStep(1);
+            if (!firstReady) return;
+            setLoading(true);
+            try {
+                const data = setpRef.current?.resData();
+                if (!data) return;
+                const first = data.accounts[0];
+                if (data.avatar === undefined && "avatar" in first) {
+                    if (typeof first.avatar === "number") {
+                        data.avatar = first.avatar;
+                    } else if (first.avatar && first.url) {
+                        data.avatar = await api.post("/api/account/avatar/preview", {
+                            searchParams: { url: first.url }, timeout: false,
+                        }).json<number | null>() ?? undefined;
+                    }
+                }
+                setInsert(data);
+                setActiveStep(1);
+            } catch (error) {
+                pushError(error, "Prepare first account");
+            } finally {
+                setLoading(false);
+            }
+            return;
         }
         if (activeStep === 1) {
             if (insert.alias && insert.overview)
@@ -66,7 +86,7 @@ export default function AddCreatorDialog({ onClose }: {
                 api.post("/api/creator/create", { json: insert }).json<number>()
                     .then((res) => {
                         onClose(res);
-                        pushTaskSuccess(`Creator added successfully with ${insert.accounts.length} accounts. Task UID: ${res}.`);
+                        pushTaskSuccess(`Creator import task submitted with ${insert.accounts.length} accounts. UID: ${res}.`);
                     })
                     .catch((error) => pushError("Error creating Creator: " + error.message))
                     .finally(() => setLoading(false));
@@ -74,7 +94,8 @@ export default function AddCreatorDialog({ onClose }: {
         }
     }
     const handleBack = () => {
-        if (activeStep > 0) {
+        if (activeStep > 0 && !loading) {
+            if (activeStep === 1) setFirstReady(false);
             setActiveStep(activeStep - 1);
         }
     }
@@ -85,7 +106,7 @@ export default function AddCreatorDialog({ onClose }: {
             open
             fullScreen
             onKeyDown={(e) => {
-                if (e.key === "Escape") {
+                if (e.key === "Escape" && !loading) {
                     e.stopPropagation();
                     onClose(null);
                 }
@@ -105,7 +126,7 @@ export default function AddCreatorDialog({ onClose }: {
                         <Typography>
                             Step {activeStep + 1}: {label[activeStep]}
                         </Typography>
-                        <IconButton onClick={() => onClose(null)}>
+                        <IconButton disabled={loading} onClick={() => onClose(null)}>
                             <CloseRoundedIcon />
                         </IconButton>
                     </Box>
@@ -114,66 +135,26 @@ export default function AddCreatorDialog({ onClose }: {
             <Divider variant="middle" flexItem />
             <DialogContent sx={{ p: 0 }}>
 
-                {activeStep === 0 && <StepOne defaultValue={insert} ref={setpRef} />}
+                {activeStep === 0 && <StepOne defaultValue={insert} ref={setpRef} onReady={setFirstReady} />}
                 {activeStep === 1 && <StepTwo insert={insert} setInsert={setInsert} />}
                 {activeStep === 2 && <StepThree accounts={insert.accounts ?? []} setAccounts={setInsert} />}
 
             </DialogContent>
             {isUpMd && <Divider variant="middle" flexItem />}
             <DialogActions>
-                {isUpMd
-                    ? <Box sx={{ display: "flex", justifyContent: "space-between", width: "100%", px: 3, py: 1 }}>
-                        <Button
-                            variant="outlined"
-                            onClick={handleBack}
-                            disabled={activeStep === 0}
-                            startIcon={<KeyboardArrowLeftRoundedIcon />}
-                        >
-                            Back
-                        </Button>
-                        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
-                            <Button
-                                variant="outlined"
-                                onClick={() => onClose(null)}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="contained"
-                                onClick={handleNext}
-                                disabled={activeStep === 2 && (insert.accounts ?? []).length === 0}
-                                endIcon={<KeyboardArrowRightRoundedIcon />}
-                                loading={loading}
-                            >
-                                {activeStep === 2 ? "Finish" : "Next"}
-                            </Button>
-                        </Box>
-                    </Box>
-                    : <MobileStepper
-                        variant="progress"
-                        steps={3}
-                        activeStep={activeStep}
-                        backButton={
-                            <Button
-                                onClick={handleBack}
-                                disabled={activeStep === 0}
-                                startIcon={<KeyboardArrowLeftRoundedIcon />}
-                            >
-                                Back
-                            </Button>
-                        }
-                        nextButton={
-                            <Button
-                                onClick={handleNext}
-                                disabled={activeStep === 2 && (insert.accounts ?? []).length === 0}
-                                endIcon={<KeyboardArrowRightRoundedIcon />}
-                                loading={loading}
-                            >
-                                {activeStep === 2 ? "Finish" : "Next"}
-                            </Button>
-                        }
-                    />
-                }
+                <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5, width: "100%", px: { xs: 0, md: 3 }, py: 1 }}>
+                    <Button color="error" variant="outlined" disabled={loading} onClick={() => onClose(null)}>Cancel</Button>
+                    <Button variant="outlined" onClick={handleBack} disabled={loading || activeStep === 0} startIcon={<KeyboardArrowLeftRoundedIcon />}>Back</Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleNext}
+                        disabled={loading || (activeStep === 0 && !firstReady) || (activeStep === 2 && (insert.accounts ?? []).length === 0)}
+                        endIcon={<KeyboardArrowRightRoundedIcon />}
+                        loading={loading}
+                    >
+                        {activeStep === 2 ? "Finish" : "Next"}
+                    </Button>
+                </Box>
             </DialogActions>
         </Dialog>
     );

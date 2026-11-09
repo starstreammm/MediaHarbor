@@ -18,7 +18,7 @@ export async function updateSettings(config: Record<string, any>) {
     if (!config) throw new Error("No config provided");
 
     try {
-        const res = await api.post("/api/init/settings", { json: config }).json<TableSettings>();
+        const res = await api.post("/api/system/settings", { json: config }).json<TableSettings>();
         return res;
     }
     catch (e) {

@@ -12,10 +12,6 @@ import {
     IconButton,
     Typography,
     Divider,
-    Popover,
-    Paper,
-    MenuList,
-    MenuItem,
     Tooltip,
     Link,
     Dialog,
@@ -27,18 +23,18 @@ import MoreVertRoundedIcon from '@mui/icons-material/MoreVertRounded';
 import TaskAltRoundedIcon from '@mui/icons-material/TaskAltRounded';
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded';
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { lazy, Suspense, useState, type Dispatch, type SetStateAction } from "react";
 
 import type { TableAccount } from "~/model/table";
-import type { AccountFilter } from "~/model/cursor";
 import { GridCardContainer, GridCardItem } from "~/hooks/card_view";
-import { pushMsg } from "~/components/error_popout";
+import { pushMsg, pushTaskSuccess } from "~/components/error_popout";
 import DeleteConfirmDialog from "~/components/delete_confirm";
 import { syncSubmit } from "~/function/account";
 import UserAvatar from "../avatar";
 import AccountDetailView from "./view_index";
-import { AccountFilterDialog } from "./filter";
 
+const SyncDetailsDialog = lazy(() => import("./sync_details"));
+const SyncSettingsDialog = lazy(() => import("./sync_settings"));
 
 
 function CompletelySyncConfirmDialog({ uid, onClose }: { uid: number; onClose: () => void }) {
@@ -59,7 +55,10 @@ function CompletelySyncConfirmDialog({ uid, onClose }: { uid: number; onClose: (
                     <Button
                         onClick={() => {
                             syncSubmit({ uid, complete: true })
-                                .then((task_uid) => pushMsg(`Sync task submitted successfully. UID: ${task_uid}`, "success"));
+                                .then((task_uid) => pushTaskSuccess(`Sync task submitted. UID: ${task_uid}.`))
+                                .catch(() => {
+                                    // syncSubmit already displays the submission error.
+                                });
                             onClose();
                         }}
                         variant="contained">
@@ -76,13 +75,18 @@ function ActionList({ account, anchorEl, onClose }: {
     anchorEl: HTMLElement | undefined;
     onClose: () => void;
 }) {
-    const [openEdit, setOpenEdit] = useState<AccountFilter | null>(null);
     const [openDelete, setOpenDelete] = useState<[number, string] | null>(null);
     const [openCompletelySync, setOpenCompletelySync] = useState<number | null>(null);
+    const [syncDetailsUid, setSyncDetailsUid] = useState<number | null>(null);
 
 
     return (
         <>
+            {syncDetailsUid !== null &&
+                <Suspense fallback={null}>
+                    <SyncDetailsDialog uid={syncDetailsUid} onClose={() => setSyncDetailsUid(null)} />
+                </Suspense>
+            }
             {openDelete !== null &&
                 <DeleteConfirmDialog
                     onClose={(needDelete) => setOpenDelete(null)}
@@ -92,58 +96,50 @@ function ActionList({ account, anchorEl, onClose }: {
                     </>}
                 />
             }
-            {openEdit !== null &&
-                <AccountFilterDialog
-                    filter={openEdit}
-                    onClose={() => setOpenEdit(null)}
-                />
-            }
             {openCompletelySync !== null &&
                 <CompletelySyncConfirmDialog
                     uid={openCompletelySync}
                     onClose={() => setOpenCompletelySync(null)}
                 />
             }
-            {account !== null &&
-                <Popover
-                    open={Boolean(anchorEl)}
-                    anchorEl={anchorEl}
-                    onClose={onClose}
-                    sx={{ zIndex: 1300 }}
-                    anchorOrigin={{
-                        vertical: 'bottom',
-                        horizontal: 'right',
-                    }}
-                    transformOrigin={{
-                        vertical: 'top',
-                        horizontal: 'right',
-                    }}
-                >
-                    <Paper elevation={13}>
-                        <MenuList>
-                            {([
-                                ["Sync Now", "primary.main", () =>
-                                    syncSubmit({ uid: account.uid })
-                                        .then((task_uid) => pushMsg(`Sync task submitted successfully. UID: ${task_uid}`, "success"))
-                                ],
-                                ["Edit Sync Settings", "", () => setOpenEdit(account.filter ?? {})],
-                                ["Delete", "error.main", () => setOpenDelete([account.uid, account.alias])],
-                                ["Completely Sync", "warning.main", () => setOpenCompletelySync(account.uid)],
-                            ] as [string, string, () => void][]).map(([text, color, action]) =>
-                                <MenuItem
-                                    key={text}
+            {account !== null && Boolean(anchorEl) &&
+                <Suspense fallback={null}>
+                    <SyncSettingsDialog
+                        uid={account.uid}
+                        onClose={onClose}
+                        actions={
+                            <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                                <Button
+                                    disabled={!account.platform || !account.pid}
                                     onClick={() => {
-                                        action();
-                                        onClose();
+                                        syncSubmit({ uid: account.uid })
+                                            .then((task_uid) => {
+                                                pushTaskSuccess(`Sync task submitted. UID: ${task_uid}.`);
+                                                onClose();
+                                            })
+                                            .catch(() => {
+                                                // syncSubmit already displays the submission error.
+                                            });
                                     }}
-                                    sx={{ color }}
                                 >
-                                    {text}
-                                </MenuItem>
-                            )}
-                        </MenuList>
-                    </Paper>
-                </Popover>
+                                    Sync now
+                                </Button>
+                                <Button onClick={() => {
+                                    setSyncDetailsUid(account.uid);
+                                    onClose();
+                                }}>Sync details</Button>
+                                <Button color="warning" disabled={!account.platform || !account.pid} onClick={() => {
+                                    setOpenCompletelySync(account.uid);
+                                    onClose();
+                                }}>Complete sync</Button>
+                                <Button color="error" onClick={() => {
+                                    setOpenDelete([account.uid, account.alias]);
+                                    onClose();
+                                }}>Delete account</Button>
+                            </Box>
+                        }
+                    />
+                </Suspense>
             }
         </>
     );
@@ -252,7 +248,7 @@ export function ListView({ accounts }: { accounts: TableAccount[] }) {
                                     }
                                 </TableCell>
                                 <TableCell>
-                                    <IconButton onClick={(e) => {
+                                    <IconButton aria-label="Account settings and actions" onClick={(e) => {
                                         e.stopPropagation();
                                         setActionAnchor([e.currentTarget, index]);
                                     }}>
@@ -280,7 +276,7 @@ export function CardView({ accounts }: { accounts: TableAccount[] }) {
                         <CardHeader
                             avatar={<UserAvatar uid={account.avatar} size={43} />}
                             action={
-                                <IconButton onClick={(e) => {
+                                <IconButton aria-label="Account settings and actions" onClick={(e) => {
                                     e.stopPropagation();
                                     setActionAnchor([e.currentTarget, index]);
                                 }}>

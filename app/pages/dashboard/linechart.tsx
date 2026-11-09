@@ -5,7 +5,10 @@ import { LineChart } from '@mui/x-charts/LineChart';
 import { useEffect, useRef, useState } from "react";
 
 import type { TableStatistics } from '~/model/status';
-import { formatBytes } from "~/function/dashboard";
+import { formatBytes, platformLabels, postCount } from "~/function/dashboard";
+import type { Platform } from "~/model/enum";
+
+const postAxisNumber = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
 function getDateFormatter(width: number, dates: Date[]) {
     if (!dates.length) {
@@ -38,7 +41,7 @@ function getDateFormatter(width: number, dates: Date[]) {
 };
 
 
-export function PostLineChart({ data }: { data: TableStatistics[] }) {
+export function PostLineChart({ data, platform }: { data: TableStatistics[]; platform: Platform }) {
     const theme = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(0);
@@ -60,98 +63,43 @@ export function PostLineChart({ data }: { data: TableStatistics[] }) {
     return (
         <LineChart
             ref={containerRef}
+            hideLegend
             xAxis={[{
                 id: 'data',
                 data: date,
                 scaleType: 'time',
                 valueFormatter: getDateFormatter(width, date),
+                tickNumber: Math.max(2, Math.floor(width / 100)),
                 height: 25,
             }]}
             yAxis={[{
                 id: 'volume',
                 scaleType: 'linear',
-                valueFormatter: (value: number) => Math.floor(value).toString(),
-                width: 30,
+                min: 0,
+                tickMinStep: 1,
+                valueFormatter: (value: number) => postAxisNumber.format(value),
+                width: 'auto',
             }]}
             slotProps={{ tooltip: { trigger: 'axis' } }}
             axisHighlight={{
                 x: "line",
                 y: "none",
             }}
-            series={[
-                {
-                    yAxisId: 'volume',
-                    label: 'Total',
-                    color: theme.vars?.palette.primary.main,
-                    data: data.map((day) =>
-                        Object.entries(day)
-                            .filter(([key]) => key.startsWith("post_len_"))
-                            .reduce((acc, [_, value]) => acc + value, 0)
-                    ),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'volume',
-                    label: 'Douyin',
-                    color: "#2b0a1d",
-                    data: data.map((day) => day.post_len_douyin),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'volume',
-                    label: 'Bilibili',
-                    color: "#FF6699",
-                    data: data.map((day) => day.post_len_bilibili),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'volume',
-                    label: 'XHS',
-                    color: "#ff2442",
-                    data: data.map((day) => day.post_len_xhs),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'volume',
-                    label: 'X',
-                    color: "#000000",
-                    data: data.map((day) => day.post_len_x),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'volume',
-                    label: 'Ins',
-                    color: "#6B5B95",
-                    data: data.map((day) => day.post_len_ins),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'volume',
-                    label: 'Youtube',
-                    color: "#fe0132",
-                    data: data.map((day) => day.post_len_youtube),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-            ]}
+            series={[{
+                yAxisId: 'volume',
+                label: platformLabels[platform],
+                color: theme.vars?.palette.primary.main,
+                data: data.map(day => postCount(day, platform)),
+                valueFormatter: value => value?.toLocaleString() ?? "",
+                highlightScope: { highlight: 'item' },
+                showMark: false,
+                curve: "monotoneX",
+            }]}
         />
     )
 }
 
-export function FileLineChart({ data }: { data: TableStatistics[] }) {
+export function FileLineChart({ data, kind }: { data: TableStatistics[]; kind: "video" | "photo" }) {
     const theme = useTheme();
     const containerRef = useRef<HTMLDivElement>(null);
     const [width, setWidth] = useState(0);
@@ -169,11 +117,6 @@ export function FileLineChart({ data }: { data: TableStatistics[] }) {
     }, [, data]);
 
     const date = data.map((day) => new Date(day.date));
-    const calTotal = (day: TableStatistics, len: boolean) => {
-        return len
-            ? day.file_len_photo + day.file_len_video
-            : day.file_size_photo + day.file_size_video;
-    }
 
     return (
         <LineChart
@@ -202,56 +145,18 @@ export function FileLineChart({ data }: { data: TableStatistics[] }) {
             series={[
                 {
                     yAxisId: 'len',
-                    label: 'LenTotal',
+                    label: kind === "video" ? "Videos" : "Images",
                     color: theme.vars?.palette.primary.main,
-                    data: data.map((day) => calTotal(day, true)),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'len',
-                    label: 'LenVideo',
-                    color: "#2b0a1d",
-                    data: data.map((day) => day.file_len_video),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'len',
-                    label: 'LenPhoto',
-                    color: "#FF6699",
-                    data: data.map((day) => day.file_len_photo),
+                    data: data.map(day => day[`file_len_${kind}`]),
                     highlightScope: { highlight: 'item' },
                     showMark: false,
                     curve: "monotoneX",
                 },
                 {
                     yAxisId: 'size',
-                    label: 'SizeTotal',
+                    label: 'Storage',
                     color: theme.vars?.palette.secondary.main,
-                    data: data.map((day) => calTotal(day, false)),
-                    valueFormatter: (value: number | null) => formatBytes(value ?? 0),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'size',
-                    label: 'SizeVideo',
-                    color: "#000000",
-                    data: data.map((day) => day.file_size_video),
-                    valueFormatter: (value: number | null) => formatBytes(value ?? 0),
-                    highlightScope: { highlight: 'item' },
-                    showMark: false,
-                    curve: "monotoneX",
-                },
-                {
-                    yAxisId: 'size',
-                    label: 'SizePhoto',
-                    color: "#6B5B95",
-                    data: data.map((day) => day.file_size_photo),
+                    data: data.map(day => day[`file_size_${kind}`]),
                     valueFormatter: (value: number | null) => formatBytes(value ?? 0),
                     highlightScope: { highlight: 'item' },
                     showMark: false,

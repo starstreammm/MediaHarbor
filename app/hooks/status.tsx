@@ -13,13 +13,6 @@ export function useStatus() {
                 if (model_res?.statistic && model_res?.delete && model_res?.queue)
                     model_res.base = true;
 
-                for (const key in api_res) {
-                    if (api_res[key as keyof ApiHealthStatus] !== null) {
-                        model_res.apis = true;
-                        break;
-                    }
-                }
-
                 return {
                     model_status: model_res ?? {},
                     api_status: api_res ?? {},

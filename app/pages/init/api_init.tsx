@@ -1,146 +1,96 @@
-import {
-    List,
-    ListItem,
-    ListItemIcon,
-    ListItemText,
-    Typography,
-    CircularProgress,
-} from "@mui/material";
-import NotInterestedRoundedIcon from '@mui/icons-material/NotInterestedRounded';
-import ErrorRoundedIcon from '@mui/icons-material/ErrorRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import WarningRoundedIcon from '@mui/icons-material/WarningRounded';
+import { useImperativeHandle, useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from "@mui/material";
+import { Link } from "react-router";
 
-import {
-    useState,
-    useRef,
-    useEffect,
-    useImperativeHandle,
-} from "react";
-
-import type { TableSettings } from "~/model/table";
-import type { ApiInitStatus } from "~/model/api";
-import { Platform } from "~/model/enum";
-import { NextButton, ConfigInput } from "~/pages/init/components";
+import { api } from "~/hooks/api";
+import type { ApiInitStatus, ApiPlatformRegistration } from "~/model/api";
 import { fetchApiInitStatus } from "~/function/init";
-import { fetchSettings } from "~/function/setting";
+import Accounts from "~/pages/api-health/accounts";
 
-export default function ApiInit({ onEnd, onNext, disabled, ref }: {
+
+export default function ApiInit({ onEnd, onNext, disabled, ready, ref }: {
     onEnd?: (error_occurred: boolean) => void;
     onNext?: () => void;
     disabled?: boolean;
+    ready?: boolean;
     ref?: React.Ref<{ onSubmit: () => void }>;
 }) {
-    // 0: input, 1: updating, 2: finished, 3: error
-    const [progress, setProgress] = useState(0);
     const [status, setStatus] = useState<ApiInitStatus>({});
-
-    const org = useRef<TableSettings>({} as TableSettings);
-    const [now, setNow] = useState<TableSettings>(org.current);
-
-
-    useImperativeHandle(ref, () => ({ onSubmit() { onUpdate(); }, }));
-
+    const [busy, setBusy] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const submitting = useRef(false);
+    const catalog = useQuery({
+        queryKey: ["api-catalog"],
+        queryFn: () => api.get("/api/init/api/catalog").json<ApiPlatformRegistration[]>(),
+        retry: false,
+        refetchInterval: busy ? false : 8000,
+    });
 
     async function onUpdate() {
-        setProgress(1);
+        if (submitting.current) return;
+        submitting.current = true;
+        setBusy(true);
+        setError(null);
+        setStatus({});
         try {
-            for await (const res of fetchApiInitStatus(org.current, now, () => setProgress(3))) {
-                setStatus(res);
+            if (!catalog.data) throw new Error("Load the API catalog before initializing.");
+            for await (const progress of fetchApiInitStatus({})) {
+                setStatus(progress);
             }
-            setProgress(2);
             onEnd?.(false);
+        } catch (failure) {
+            setError(failure instanceof Error ? failure.message : "API initialization failed.");
+            onEnd?.(true);
+        } finally {
+            await catalog.refetch();
+            submitting.current = false;
+            setBusy(false);
         }
-        catch { onEnd?.(true); }
     }
 
-    useEffect(() => {
-        fetchSettings()
-            .then((res) => {
-                setNow(res);
-                org.current = res;
-            });
-    }, []);
+    useImperativeHandle(ref, () => ({ onSubmit: () => { void onUpdate(); } }));
 
-
-
-    if (progress === 0) {
-        return (
-            <>
-                {Platform.map((key) =>
-                    <ConfigInput
-                        key={key}
-                        name={`${key.charAt(0).toUpperCase() + key.slice(1)} Cookie`}
-                        value={now[`cookie_${key}` as keyof TableSettings] as string ?? ""}
-                        setValue={(newValue: string) => setNow((prev) => ({ ...prev, [`cookie_${key}`]: newValue }))}
-                        multiline
-                        disabled={disabled}
-                    />
-                )}
-                {!ref &&
-                    <NextButton
-                        onClick={() => onUpdate()}
-                        label="Submit"
-                    />
-                }
-            </>
-        );
-    }
-    else {
-        const statusIcon = (state: string | null | undefined) => {
-            switch (state) {
-                case null:
-                    return <NotInterestedRoundedIcon color="disabled" />;
-                case undefined:
-                    return <NotInterestedRoundedIcon color="disabled" />;
-                case "":
-                    return <CircularProgress size={28} color="secondary" />;
-                case "true":
-                    return <CheckCircleRoundedIcon color="success" />;
-                case "false":
-                    return <WarningRoundedIcon color="warning" />;
-                default:
-                    return <ErrorRoundedIcon color="error" />;
-            }
-        };
-
-        const statusText = (state: string | null | undefined) => {
-            switch (state) {
-                case null:
-                    return ": Unset";
-                case undefined:
-                    return ": Unset";
-                case "true":
-                    return "";
-                case "false":
-                    return ": The cookie is updated more than 30 days ago, please update it.";
-                default:
-                    return `: ${state}`;
-            }
-        };
-
-        return (
-            <>
-                <List>
-                    {Platform.map((key) => (
-                        <ListItem key={key}>
-                            <ListItemIcon>
-                                {statusIcon(status[key])}
-                            </ListItemIcon>
-                            <ListItemText>
-                                <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
-                                    {key.charAt(0).toUpperCase() + key.slice(1)}
-                                    {statusText(status[key])}
-                                </Typography>
-                            </ListItemText>
-                        </ListItem>
-                    ))}
-                </List>
-                {onNext && (progress === 2
-                    ? <NextButton onClick={() => onNext?.()} />
-                    : <NextButton onClick={onUpdate} label="Retry" />
-                )}
-            </>
-        );
-    }
+    return (
+        <Stack spacing={2} sx={{ width: "100%" }}>
+            <Typography variant="body2" color="text.secondary">
+                Start platforms when you are ready. Add login accounts below for features that need them.
+                Completed setup steps restart automatically on later launches.
+            </Typography>
+            {catalog.isPending && <CircularProgress size={24} />}
+            {catalog.isError && <Alert severity="error" action={
+                <Button onClick={() => { void catalog.refetch(); }}>Retry</Button>
+            }>Could not load APIs. Initialize the database first.</Alert>}
+            {error && <Alert severity="error">{error}</Alert>}
+            {catalog.data?.map(item => {
+                const updating = busy && status[item.key] === "";
+                return (
+                    <Box key={item.key} sx={{ border: 1, borderColor: "divider", borderRadius: 2, p: 2 }}>
+                        <Stack spacing={1}>
+                            <Stack direction="row" spacing={1} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+                                <Typography sx={{ fontWeight: "bold" }}>{item.name}</Typography>
+                                {item.authenticated_endpoints.length > 0 && <Chip size="small" label="Some features require login" />}
+                                <Chip size="small" color={item.state === "Ready" ? "success" : "default"}
+                                    label={updating ? "Initializing" : item.state === "Ready" ? "Ready for requests" : item.state} />
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary">
+                                Guest endpoints work independently of authenticated accounts.
+                            </Typography>
+                            {item.error && <Alert severity="error">{item.error}</Alert>}
+                            {item.authenticated_endpoints.length > 0 && <Accounts service={{ name: item.name, platform: item.key, enabled: item.enabled }} />}
+                        </Stack>
+                    </Box>
+                );
+            })}
+            <Typography variant="body2">
+                Review platform health and manage accounts in <Link to="/api-health">API Health</Link>.
+            </Typography>
+            <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
+                {!ref && <Button variant="outlined" disabled={disabled || busy || !catalog.data}
+                    onClick={() => { void onUpdate(); }}>{busy ? "Initializing…" : "Start / retry APIs"}</Button>}
+                {onNext && <Button variant="contained" disabled={disabled || busy || !ready || Boolean(error)}
+                    onClick={onNext}>Continue</Button>}
+            </Stack>
+        </Stack>
+    );
 }

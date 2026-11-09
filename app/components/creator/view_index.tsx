@@ -23,7 +23,6 @@ import { useState, useEffect } from "react";
 import type { TableAccount, TableCreator } from "~/model/table";
 import { useLocalStorage } from "~/hooks/storage";
 import UserAvatar from "~/components/avatar";
-import { pushMsg } from "~/components/error_popout";
 import { ViewTypeSelector, type ViewType } from "~/components/view_selector";
 import { ListView, CardView } from "~/components/account/view";
 import AddAccountDialog from "~/components/account/add_index";
@@ -128,11 +127,7 @@ export default function CreatorView({ creator, setCreator, onClose, onNext, onLa
                 {openAdd &&
                     <AddAccountDialog
                         creator_uid={creator.uid}
-                        onSubmit={(newAccount) => {
-                            if (newAccount)
-                                pushMsg(`Account Task created successfully. See the Tasks page for details.`, "success");
-                            setOpenAdd(false);
-                        }}
+                        onSubmit={() => setOpenAdd(false)}
                     />
                 }
                 <Box sx={{ display: "flex", flexDirection: { xs: "column", md: "row" }, gap: 3, p: { xs: 1, md: 3 } }}>

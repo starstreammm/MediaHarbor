@@ -2,6 +2,7 @@ import { Button, IconButton } from "@mui/material";
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { enqueueSnackbar, closeSnackbar, type VariantType } from "notistack";
 import { HTTPError, TimeoutError } from "ky";
+import { Link as RouterLink } from "react-router";
 
 
 export let openMsg = true;
@@ -134,14 +135,17 @@ export function pushTaskSuccess(text: string) {
         variant: "info",
         action: (snackbarId) => (
             <>
-                <Button onClick={() => {
-                    closeSnackbar(snackbarId);
-                    window.location.href = "/tasks";
-                }}>
+                <Button
+                    component={RouterLink}
+                    to="/tasks"
+                    color="inherit"
+                    onClick={() => closeSnackbar(snackbarId)}
+                >
                     View
                 </Button>
                 <IconButton
                     onClick={() => closeSnackbar(snackbarId)}
+                    aria-label="Dismiss task notification"
                     sx={{ borderRadius: 1, p: 0.5, ml: 1 }}
                 >
                     <CloseRoundedIcon sx={{ color: "white" }} />

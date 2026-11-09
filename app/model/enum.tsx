@@ -10,6 +10,7 @@ export type Layer = typeof Layer[number];
 
 export const Platform = [
     "douyin",
+    "tiktok",
     "bilibili",
     "xhs",
     "ins",

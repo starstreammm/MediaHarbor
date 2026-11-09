@@ -8,23 +8,28 @@ import {
     ListItem,
     ListItemIcon,
     ListItemText,
-    CircularProgress,
 } from "@mui/material";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import InfoOutlineRoundedIcon from '@mui/icons-material/InfoOutlineRounded';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import BorderColorRoundedIcon from '@mui/icons-material/BorderColorRounded';
+import RadioButtonUncheckedRoundedIcon from '@mui/icons-material/RadioButtonUncheckedRounded';
 
 import { removeComments } from "~/function/init";
 
 
-export function NextButton({ onClick, label = "Next" }: { onClick: () => void; label?: string }) {
+export function NextButton({ onClick, label = "Next", disabled = false }: {
+    onClick: () => void;
+    label?: string;
+    disabled?: boolean;
+}) {
     return (
         <Box sx={{ display: "flex", justifyContent: "flex-end", mt: 1 }}>
             <Button
                 variant="contained"
                 endIcon={<ArrowForwardRoundedIcon />}
                 onClick={onClick}
+                disabled={disabled}
             >
                 {label}
             </Button>
@@ -90,7 +95,7 @@ export function LsItem({
             <ListItemIcon sx={{ mr: 3 }}>
                 {data
                     ? <CheckCircleRoundedIcon color="success" fontSize="large" />
-                    : <CircularProgress size={28} color="secondary" />
+                    : <RadioButtonUncheckedRoundedIcon fontSize="large" color="disabled" />
                 }
             </ListItemIcon>
             <ListItemText>

@@ -38,6 +38,7 @@ export interface AccountFilter {
 
 
 export interface CursorFilter extends AccountFilter {
+    search?: string[];
     alias?: string;
     rate?: string;
     platform?: Platform[];

@@ -1,4 +1,6 @@
 import { Avatar, ButtonBase, Tooltip } from "@mui/material";
+import WarningRoundedIcon from "@mui/icons-material/WarningRounded";
+import { useFileInfo } from "~/hooks/file-info";
 import PersonRoundedIcon from '@mui/icons-material/PersonRounded';
 
 import { FileInput } from "~/hooks/file";
@@ -10,7 +12,16 @@ export default function UserAvatar({ uid, size = 88, onChange, onClick }: {
     onChange?: (newUid: number) => void;
     onClick?: () => void;
 }) {
+    const info = useFileInfo(uid);
+
     function Base() {
+        if (info.data?.exist === false) {
+            return <Tooltip title="Avatar file is missing from storage">
+                <Avatar aria-label="Avatar file missing" sx={{ width: size, height: size, bgcolor: "warning.main" }}>
+                    <WarningRoundedIcon />
+                </Avatar>
+            </Tooltip>;
+        }
         if (uid && uid >= 0) {
             return (
                 <Avatar
@@ -39,7 +50,7 @@ export default function UserAvatar({ uid, size = 88, onChange, onClick }: {
                 <ButtonBase component="label" sx={{ borderRadius: size }}>
                     <Base />
                     <FileInput
-                        onEnd={(_, u) => u ? onChange(u) : undefined}
+                        onEnd={(_, u) => u && u > 0 ? onChange(u) : undefined}
                     />
                 </ButtonBase>
             </Tooltip>

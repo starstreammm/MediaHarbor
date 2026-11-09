@@ -1,0 +1,143 @@
+x-config:
+    timezone: &timezone Asia/Shanghai
+    token: &token your-token # Recommand use `openssl rand -hex 32` to generate.
+
+volumes:
+    data:
+        driver: local
+        driver_opts:
+            type: none
+            o: bind
+            device: /path/to/data
+
+    cache:
+        # driver: local
+        # driver_opts:
+        #     type: none
+        #     o: bind
+        #     device: /path/to/cache
+
+    postgres:
+        # driver: local
+        # driver_opts:
+        #     type: none
+        #     o: bind
+        #     device: /path/to/postgres
+
+    # certs:
+    #     driver: local
+    #     driver_opts:
+    #         type: none
+    #         o: bind
+    #         device: /path/to/certs
+
+    # mihomo:
+    #     driver: local
+    #     driver_opts:
+    #         type: none
+    #         o: bind
+    #         device: /path/to/mihomo
+
+services:
+    # --------MediaHarbor--------
+    mediaharbor:
+        image: starstreammm/mediaharbor:latest # ghcr.io/starstreammm/mediaharbor:latest
+        container_name: mediaharbor-mediaharbor
+        restart: unless-stopped
+        networks:
+            - mediaharbor-net
+
+        environment:
+            TZ: *timezone
+            SERVICES_PASSWORD: *token
+
+        ports:
+            - "8888:80"
+
+        volumes:
+            - data:/data
+            - cache:/app/cache
+            # - certs:/etc/nginx/certs:ro
+
+        depends_on:
+            postgres:
+                condition: service_healthy
+            aria2:
+                condition: service_healthy
+
+    # --------Aira2-pro--------
+    aria2:
+        image: p3terx/aria2-pro:latest
+        container_name: mediaharbor-aria2
+        restart: unless-stopped
+        networks:
+            - mediaharbor-net
+
+        environment:
+            TZ: *timezone
+            RPC_SECRET: *token
+            IPV6_MODE: "true"
+            RPC_PORT: 6800
+
+        volumes:
+            - data:/data
+
+        healthcheck:
+            test:
+                - CMD-SHELL
+                - >-
+                    curl -fsS --max-time 3
+                    -H 'Content-Type: application/json'
+                    -d "{\"jsonrpc\":\"2.0\",\"id\":\"health\",\"method\":\"aria2.getVersion\",\"params\":[\"token:$${RPC_SECRET}\"]}"
+                    http://127.0.0.1:6800/jsonrpc
+                    | grep -q '"result"'
+            interval: 3m
+            timeout: 3s
+            retries: 3
+            start_period: 33s
+            start_interval: 3s
+
+    # --------Postgres--------
+    postgres:
+        image: postgres:18-trixie
+        container_name: mediaharbor-postgres
+        restart: unless-stopped
+        networks:
+            - mediaharbor-net
+
+        environment:
+            TZ: *timezone
+            POSTGRES_USER: admin
+            POSTGRES_DB: mediaharbor
+            POSTGRES_PASSWORD: *token
+
+        volumes:
+            - postgres:/var/lib/postgresql
+
+        healthcheck:
+            test:
+                - "CMD-SHELL"
+                - 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"'
+            interval: 3m
+            timeout: 3s
+            retries: 3
+            start_period: 33s
+            start_interval: 3s
+
+    # --------Mihomo (Optional)--------
+    # mihomo:
+    #     image: metacubex/mihomo:latest
+    #     container_name: mediaharbor-mihomo
+    #     restart: unless-stopped
+    #     networks:
+    #         - mediaharbor-net
+
+    #     ports:
+    #         - "9090:9090" # Api Management
+
+    #     volumes:
+    #         - mihomo:/root/.config/mihomo
+
+networks:
+    mediaharbor-net:
+        driver: bridge

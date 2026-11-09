@@ -22,15 +22,17 @@ import PermMediaOutlinedIcon from '@mui/icons-material/PermMediaOutlined';
 import PeopleOutlineRoundedIcon from '@mui/icons-material/PeopleOutlineRounded';
 import AssignmentRoundedIcon from '@mui/icons-material/AssignmentRounded';
 import SettingsRoundedIcon from '@mui/icons-material/SettingsRounded';
-import ContrastIcon from '@mui/icons-material/Contrast';
+import ContrastRoundedIcon from '@mui/icons-material/ContrastRounded';
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import CollectionsRoundedIcon from '@mui/icons-material/CollectionsRounded';
 import EventNoteRoundedIcon from '@mui/icons-material/EventNoteRounded';
+import MonitorHeartRoundedIcon from '@mui/icons-material/MonitorHeartRounded';
 
 import { useState, useEffect } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
+import { PostPreviewProvider } from "~/components/post/preview";
 import { useLocalStorage } from "~/hooks/storage";
 import { clearAllMsg } from '~/components/error_popout';
 import { useStatus } from '~/hooks/status';
@@ -174,13 +176,14 @@ export default function Sidebar() {
                     ['Collections', <CollectionsRoundedIcon />],
                     ['Tasks', <EventNoteRoundedIcon />],
                     ['Logs', <AssignmentRoundedIcon />],
+                    ['API Health', <MonitorHeartRoundedIcon />],
                     ['Settings', <SettingsRoundedIcon />]
                 ] as [string, React.ReactNode][]).map(([text, icon]) => {
                     return (
-                        <NavLink to={`/${text.toLowerCase()}`} end key={text} >
+                        <NavLink to={`/${text.toLowerCase().replaceAll(' ', '-')}`} end key={text} >
                             <ListItem disablePadding>
                                 <ListItemButton
-                                    selected={location.pathname === `/${text.toLowerCase()}`}
+                                    selected={location.pathname === `/${text.toLowerCase().replaceAll(' ', '-')}`}
                                     sx={{ pl: 2.5, py: 1.8 }}
                                 >
                                     <ListItemIcon>
@@ -207,7 +210,7 @@ export default function Sidebar() {
                     }
             ]}>
                 <IconButton onClick={() => changeThemeMode()} >
-                    <ContrastIcon />
+                    <ContrastRoundedIcon />
                 </IconButton>
                 <Paper
                     elevation={fullDrawer ? 8 : 0}
@@ -283,26 +286,30 @@ export default function Sidebar() {
             <Box component="main" sx={{
                 ml: `${drawerWidth}px`,
                 width: `calc(100% - ${drawerWidth}px)`,
-                height: '100vh',
+                height: location.pathname === "/dashboard" || location.pathname === "/api-health" ? 'auto' : '100vh',
+                minHeight: '100vh',
+                display: 'flow-root',
                 bgcolor: theme.vars?.palette.background.default,
                 transition: theme.transitions.create(['background-color', 'width', 'margin-left'], {
                     easing: theme.transitions.easing.sharp,
                     duration: theme.transitions.duration.complex,
                 }),
             }} >
-                <Outlet context={{
-                    appBarHeight: 80,
-                    drawerWidth: drawerWidth,
-                    mobilDrawer: () => {
-                        if (mobilDrawer) {
-                            setMobilDrawer(false);
-                        }
-                        else {
-                            setMobilDrawer(true);
-                            setFullDrawer(true);
-                        }
-                    },
-                }} />
+                <PostPreviewProvider>
+                    <Outlet context={{
+                        appBarHeight: 80,
+                        drawerWidth: drawerWidth,
+                        mobilDrawer: () => {
+                            if (mobilDrawer) {
+                                setMobilDrawer(false);
+                            }
+                            else {
+                                setMobilDrawer(true);
+                                setFullDrawer(true);
+                            }
+                        },
+                    }} />
+                </PostPreviewProvider>
             </Box>
         </>
     );

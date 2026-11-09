@@ -2,8 +2,8 @@
 .DS_Store
 .env
 cache/
-docker-compose.override.yaml
-Dockerfile.override
+logs/
+tests/temp/
 
 # Node modules
 /node_modules/

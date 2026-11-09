@@ -31,7 +31,7 @@ export async function getSingleCollection(uid: number) {
 
 export async function updateCollections(data: ApiCollectionUpdate) {
     try {
-        await api.post("/api/collection/update", { json: data })
+        return await api.post("/api/collection/update", { json: data }).json<number | null>();
     }
     catch (err) {
         pushError(err, "Update collection");

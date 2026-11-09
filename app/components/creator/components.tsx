@@ -21,10 +21,10 @@ import {
     DialogContent,
     DialogActions,
 } from "@mui/material";
-import MenuOpenRoundedIcon from '@mui/icons-material/MenuOpenRounded';
-import AddRoundedIcon from '@mui/icons-material/AddRounded';
-import DeleteForeverRoundedIcon from '@mui/icons-material/DeleteForeverRounded';
-import BorderColorRoundedIcon from '@mui/icons-material/BorderColorRounded';
+import MenuOpenRoundedIcon from "@mui/icons-material/MenuOpenRounded";
+import AddRoundedIcon from "@mui/icons-material/AddRounded";
+import DeleteForeverRoundedIcon from "@mui/icons-material/DeleteForeverRounded";
+import BorderColorRoundedIcon from "@mui/icons-material/BorderColorRounded";
 
 import {
     useEffect,
@@ -37,7 +37,13 @@ import {
     type SetStateAction,
 } from "react";
 
-import type { ApiCreatorCreate, ApiAccountInsert, ApiAccountParse, InsertRef, ApiAccountCreate } from "~/model/api";
+import type {
+    ApiCreatorCreate,
+    ApiAccountInsert,
+    ApiAccountParse,
+    InsertRef,
+    ApiAccountCreate,
+} from "~/model/api";
 import ParserInsert from "~/components/account/parser";
 import ManualInsert from "~/components/account/manual";
 import { pushError } from "../error_popout";
@@ -45,13 +51,18 @@ import UserAvatar from "~/components/avatar";
 import AddAccountDialog from "../account/add_index";
 
 const tabType = ["parser", "manual"] as const;
-type tabType = typeof tabType[number];
+type tabType = (typeof tabType)[number];
 
-export function FirstTypeTab({ type, setType }: {
-    type: tabType,
+export function FirstTypeTab({
+    type,
+    setType,
+}: {
+    type: tabType;
     setType: (value: tabType) => void;
 }) {
-    const isUpMd = useMediaQuery((theme) => theme.breakpoints.up('md'), { noSsr: true });
+    const isUpMd = useMediaQuery((theme) => theme.breakpoints.up("md"), {
+        noSsr: true,
+    });
     const [open, setOpen] = useState(false);
 
     function Core() {
@@ -64,24 +75,23 @@ export function FirstTypeTab({ type, setType }: {
                     width: { xs: "100%", md: 103 },
                     height: "100%",
                     borderRight: 1,
-                    borderColor: 'divider',
+                    borderColor: "divider",
                 }}
             >
                 <Tab label="Parser Insert" value="parser" />
                 <Tab label="Manual Insert" value="manual" />
             </Tabs>
         );
-    };
+    }
 
-    if (isUpMd)
-        return <Core />;
+    if (isUpMd) return <Core />;
     else
         return (
             <>
                 <Fab
                     color="primary"
                     onClick={() => setOpen(true)}
-                    sx={{ position: 'absolute', bottom: 68, right: 8 }}
+                    sx={{ position: "absolute", bottom: 68, right: 8 }}
                 >
                     <MenuOpenRoundedIcon />
                 </Fab>
@@ -101,41 +111,119 @@ export function FirstTypeTab({ type, setType }: {
 export const StepOne = forwardRef(StepOneCore);
 
 function StepOneCore(
-    { defaultValue = {} as ApiCreatorCreate }: { defaultValue?: ApiCreatorCreate; },
+    {
+        defaultValue = {} as ApiCreatorCreate,
+        onReady,
+    }: { defaultValue?: ApiCreatorCreate; onReady: (ready: boolean) => void },
     ref: ForwardedRef<InsertRef<ApiCreatorCreate, void>>,
 ) {
-    const [type, setType] = useState(defaultValue.accounts && !("posts" in defaultValue.accounts[0]) ? "manual" : "parser");
+    const firstAccount = defaultValue.accounts?.[0];
+    const [type, setType] = useState(
+        firstAccount && !("posts" in firstAccount) ? "manual" : "parser",
+    );
     const insertRef = useRef<InsertRef<ApiAccountInsert, number>>(null);
     const parseRef = useRef<InsertRef<ApiAccountParse, number>>(null);
 
     useEffect(() => {
-        if (!tabType.includes(type as tabType))
-            setType("parser");
+        if (!tabType.includes(type as tabType)) setType("parser");
     }, [type]);
 
     useImperativeHandle(ref, () => ({
         resData() {
-            const data = type === "parser" ? parseRef.current?.resData() : insertRef.current?.resData();
+            const data =
+                type === "parser"
+                    ? parseRef.current?.resData()
+                    : insertRef.current?.resData();
             if (!data) {
                 pushError("Please insert at least one account.");
-                return defaultValue;
-            }
-            else {
+                throw new Error("No account supplied");
+            } else {
+                const sameAccount =
+                    firstAccount &&
+                    "alias" in firstAccount &&
+                    firstAccount.url === data.url &&
+                    firstAccount.pid === data.pid &&
+                    firstAccount.alias === data.alias;
                 return {
-                    alias: data.alias,
-                    overview: data.overview,
-                    rate: 0,
-                    accounts: [data, ...defaultValue.accounts?.slice(1) || []],
+                    ...defaultValue,
+                    avatar: sameAccount ? defaultValue.avatar : undefined,
+                    alias: sameAccount ? defaultValue.alias : data.alias,
+                    overview: sameAccount
+                        ? defaultValue.overview
+                        : data.overview,
+                    rate: defaultValue.rate ?? 0,
+                    accounts: [
+                        data,
+                        ...(defaultValue.accounts?.slice(1) || []),
+                    ],
                 };
             }
         },
-        submit() { return (async () => { })() },
+        submit() {
+            return (async () => {})();
+        },
     }));
 
     return (
         <Box sx={{ display: "flex", height: "100%" }}>
-            <FirstTypeTab type={type as tabType} setType={setType} />
-            <Box sx={{
+            <FirstTypeTab
+                type={type as tabType}
+                setType={(value) => {
+                    onReady(false);
+                    setType(value);
+                }}
+            />
+            <Box
+                sx={{
+                    display: "flex",
+                    width: "100%",
+                    height: "100%",
+                    flexDirection: "column",
+                    overflowY: "auto",
+                    py: { xs: 1, md: 1.5 },
+                    px: { xs: 1, md: 3 },
+                }}
+            >
+                {type === "parser" && (
+                    <ParserInsert
+                        onReady={onReady}
+                        open={type === "parser"}
+                        defaultValue={
+                            firstAccount && "posts" in firstAccount
+                                ? firstAccount
+                                : undefined
+                        }
+                        ref={parseRef}
+                    />
+                )}
+                {type === "manual" && (
+                    <ManualInsert
+                        onReady={onReady}
+                        open={type === "manual"}
+                        defaultValue={
+                            firstAccount && !("posts" in firstAccount)
+                                ? (firstAccount as ApiAccountInsert)
+                                : undefined
+                        }
+                        setType={setType}
+                        ref={insertRef}
+                    />
+                )}
+            </Box>
+        </Box>
+    );
+}
+
+export function StepTwo({
+    insert,
+    setInsert,
+}: {
+    insert: ApiCreatorCreate;
+    setInsert: Dispatch<SetStateAction<ApiCreatorCreate>>;
+}) {
+    return (
+        <Box
+            sx={{
                 display: "flex",
                 width: "100%",
                 height: "100%",
@@ -144,61 +232,44 @@ function StepOneCore(
                 gap: { xs: 1.5, md: 3 },
                 py: { xs: 1, md: 1.5 },
                 px: { xs: 1, md: 3 },
-            }}>
-                <ParserInsert
-                    open={type === "parser"}
-                    defaultValue={
-                        defaultValue.accounts && ("posts" in defaultValue.accounts[0])
-                            ? defaultValue.accounts[0]
-                            : undefined
-                    }
-                    ref={parseRef}
-                />
-                <ManualInsert
-                    open={type === "manual"}
-                    defaultValue={
-                        defaultValue.accounts && !("posts" in defaultValue.accounts[0])
-                            ? defaultValue.accounts[0] as ApiAccountInsert
-                            : undefined
-                    }
-                    setType={setType}
-                    ref={insertRef} />
-            </Box>
-        </Box>
-    );
-};
-
-
-export function StepTwo({ insert, setInsert }: {
-    insert: ApiCreatorCreate;
-    setInsert: Dispatch<SetStateAction<ApiCreatorCreate>>;
-}) {
-    return (
-        <Box sx={{
-            display: "flex",
-            width: "100%",
-            height: "100%",
-            flexDirection: "column",
-            overflowY: "auto",
-            gap: { xs: 1.5, md: 3 },
-            py: { xs: 1, md: 1.5 },
-            px: { xs: 1, md: 3 },
-        }}>
-            <Box sx={{
-                display: "flex",
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: { xs: "space-between", md: "flex-start" },
-                gap: { xs: 0, md: 8 },
-            }}>
-                <Tooltip title={insert.avatar === undefined ? "Click to upload an avatar, or the first account's will be used as default." : Number.isNaN(insert.avatar) ? "" : "Avator will be download after submit"} placement="top">
-                    <UserAvatar uid={typeof insert.avatar === "number" ? insert.avatar : undefined} size={63} onChange={(uid) => setInsert((prev) => ({ ...prev, avatar: uid }))} />
+            }}
+        >
+            <Box
+                sx={{
+                    display: "flex",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: { xs: "space-between", md: "flex-start" },
+                    gap: { xs: 0, md: 8 },
+                }}
+            >
+                <Tooltip
+                    title="Click to upload or replace the creator avatar"
+                    placement="top"
+                >
+                    <UserAvatar
+                        uid={
+                            typeof insert.avatar === "number"
+                                ? insert.avatar
+                                : undefined
+                        }
+                        size={63}
+                        onChange={(uid) =>
+                            setInsert((prev) => ({ ...prev, avatar: uid }))
+                        }
+                    />
                 </Tooltip>
                 <TextField
                     required
                     label="Alias"
                     value={insert.alias}
-                    onChange={(e) => setInsert((prev) => ({ ...prev, alias: e.target.value }))} />
+                    onChange={(e) =>
+                        setInsert((prev) => ({
+                            ...prev,
+                            alias: e.target.value,
+                        }))
+                    }
+                />
             </Box>
             <TextField
                 label="Overview"
@@ -207,9 +278,17 @@ export function StepTwo({ insert, setInsert }: {
                 required
                 minRows={6}
                 value={insert.overview}
-                onChange={(e) => setInsert((prev) => ({ ...prev, overview: e.target.value }))}
+                onChange={(e) =>
+                    setInsert((prev) => ({ ...prev, overview: e.target.value }))
+                }
             />
-            <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 1, md: 3 } }}>
+            <Box
+                sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: { xs: 1, md: 3 },
+                }}
+            >
                 <Typography variant="subtitle1" sx={{ fontWeight: "bold" }}>
                     Rate
                 </Typography>
@@ -217,14 +296,19 @@ export function StepTwo({ insert, setInsert }: {
                     size="large"
                     name="post-rating"
                     value={insert?.rate || 0}
-                    onChange={(_, newValue) => setInsert((prev) => ({ ...prev, rate: newValue || 0 }))}
+                    onChange={(_, newValue) =>
+                        setInsert((prev) => ({ ...prev, rate: newValue || 0 }))
+                    }
                 />
             </Box>
         </Box>
     );
 }
 
-export function StepThree({ accounts, setAccounts }: {
+export function StepThree({
+    accounts,
+    setAccounts,
+}: {
     accounts: (ApiAccountInsert | ApiAccountCreate | ApiAccountParse)[];
     setAccounts: Dispatch<SetStateAction<ApiCreatorCreate>>;
 }) {
@@ -237,30 +321,45 @@ export function StepThree({ accounts, setAccounts }: {
             <Dialog open fullScreen>
                 <DialogTitle>Edit Manual Account</DialogTitle>
                 <DialogContent>
-                    <Box sx={{
-                        display: "flex",
-                        width: "100%",
-                        height: "100%",
-                        flexDirection: "column",
-                        overflowY: "auto",
-                        gap: { xs: 1.5, md: 3 },
-                        py: { xs: 1, md: 1.5 },
-                        px: { xs: 1, md: 3 },
-                    }}>
-                        <ManualInsert open defaultValue={accounts[edit!] as ApiAccountInsert} ref={editRef} />
+                    <Box
+                        sx={{
+                            display: "flex",
+                            width: "100%",
+                            height: "100%",
+                            flexDirection: "column",
+                            overflowY: "auto",
+                            gap: { xs: 1.5, md: 3 },
+                            py: { xs: 1, md: 1.5 },
+                            px: { xs: 1, md: 3 },
+                        }}
+                    >
+                        <ManualInsert
+                            open
+                            defaultValue={accounts[edit!] as ApiAccountInsert}
+                            ref={editRef}
+                        />
                     </Box>
                 </DialogContent>
                 <DialogActions>
                     <Box sx={{ display: "flex", gap: 3, p: { xs: 1, md: 3 } }}>
-                        <Button onClick={() => setEdit(undefined)} variant="outlined">
+                        <Button
+                            onClick={() => setEdit(undefined)}
+                            variant="outlined"
+                        >
                             Cancel
                         </Button>
                         <Button
                             onClick={() => {
                                 const res = editRef.current?.resData();
                                 if (res) {
-                                    const newAccounts = accounts.map((account, index) => index === edit ? res : account);
-                                    setAccounts((prev) => ({ ...prev, accounts: newAccounts }));
+                                    const newAccounts = accounts.map(
+                                        (account, index) =>
+                                            index === edit ? res : account,
+                                    );
+                                    setAccounts((prev) => ({
+                                        ...prev,
+                                        accounts: newAccounts,
+                                    }));
                                     setEdit(undefined);
                                 }
                             }}
@@ -271,22 +370,23 @@ export function StepThree({ accounts, setAccounts }: {
                     </Box>
                 </DialogActions>
             </Dialog>
-        )
+        );
     }
 
-
     return (
-        <Box sx={{
-            display: "flex",
-            width: "100%",
-            height: "100%",
-            flexDirection: "column",
-            overflowY: "auto",
-            gap: { xs: 1.5, md: 3 },
-            py: { xs: 1, md: 1.5 },
-            px: { xs: 1, md: 3 },
-        }}>
-            {add &&
+        <Box
+            sx={{
+                display: "flex",
+                width: "100%",
+                height: "100%",
+                flexDirection: "column",
+                overflowY: "auto",
+                gap: { xs: 1.5, md: 3 },
+                py: { xs: 1, md: 1.5 },
+                px: { xs: 1, md: 3 },
+            }}
+        >
+            {add && (
                 <AddAccountDialog
                     onRes={(res) => {
                         if (res) {
@@ -294,14 +394,14 @@ export function StepThree({ accounts, setAccounts }: {
                                 ...prev,
                                 accounts: [
                                     ...(prev.accounts || []),
-                                    ...(Array.isArray(res) ? res : [res])
-                                ]
+                                    ...(Array.isArray(res) ? res : [res]),
+                                ],
                             }));
                         }
                         setAdd(false);
                     }}
                 />
-            }
+            )}
             {edit !== undefined && <ManualInsertEdit />}
             <Table>
                 <TableHead>
@@ -323,34 +423,56 @@ export function StepThree({ accounts, setAccounts }: {
                 <TableBody>
                     {accounts.map((account, index) => (
                         <TableRow key={index}>
-                            <TableCell sx={{ whiteSpace: "nowrap" }}>{index + 1}</TableCell>
+                            <TableCell sx={{ whiteSpace: "nowrap" }}>
+                                {index + 1}
+                            </TableCell>
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
                                 {"posts" in account
                                     ? "Parser"
                                     : "alias" in account
-                                        ? "Manual"
-                                        : "Url"
-                                }
+                                      ? "Manual"
+                                      : "Url"}
                             </TableCell>
-                            <TableCell sx={{ width: "100%", overflowWrap: "anywhere" }}>
+                            <TableCell
+                                sx={{ width: "100%", overflowWrap: "anywhere" }}
+                            >
                                 {"alias" in account
                                     ? `Alias: ${account.alias}`
-                                    : `Url: ${account.url}`
-                                }
+                                    : `Url: ${account.url}`}
                             </TableCell>
                             <TableCell sx={{ whiteSpace: "nowrap" }}>
                                 <Tooltip title="Remove">
-                                    <IconButton onClick={() => setAccounts((prev) => {
-                                        const newAccounts = prev.accounts?.filter((_, i) => i !== index) || []
-                                        return { ...prev, accounts: newAccounts };
-                                    })}>
+                                    <IconButton
+                                        onClick={() =>
+                                            setAccounts((prev) => {
+                                                const newAccounts =
+                                                    prev.accounts?.filter(
+                                                        (_, i) => i !== index,
+                                                    ) || [];
+                                                return {
+                                                    ...prev,
+                                                    accounts: newAccounts,
+                                                };
+                                            })
+                                        }
+                                    >
                                         <DeleteForeverRoundedIcon color="error" />
                                     </IconButton>
                                 </Tooltip>
-                                <Tooltip title={("posts" in account) || !("alias" in account) ? "Only available for manual accounts" : "Edit"}>
+                                <Tooltip
+                                    title={
+                                        "posts" in account ||
+                                        !("alias" in account)
+                                            ? "Only available for manual accounts"
+                                            : "Edit"
+                                    }
+                                >
                                     <IconButton
                                         onClick={() => setEdit(index)}
-                                        disabled={("posts" in account) || !("alias" in account)}
+                                        disabled={
+                                            "posts" in account ||
+                                            !("alias" in account)
+                                        }
                                     >
                                         <BorderColorRoundedIcon />
                                     </IconButton>
@@ -359,7 +481,7 @@ export function StepThree({ accounts, setAccounts }: {
                         </TableRow>
                     ))}
                 </TableBody>
-            </Table >
-        </Box >
+            </Table>
+        </Box>
     );
 }

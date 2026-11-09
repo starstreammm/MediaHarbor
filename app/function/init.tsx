@@ -1,9 +1,11 @@
 import { api } from "~/hooks/api";
-import { pushError, pushMsg } from "~/components/error_popout";
 import type { ApiInitStatus } from "~/model/api";
 import type { TableSettings } from "~/model/table";
-import { Platform } from "~/model/enum";
 
+
+export function initializeSettings(config: Partial<TableSettings>) {
+    return api.post("/api/init/settings", { json: config }).json<TableSettings>();
+}
 
 
 export function removeComments(text: string): string {
@@ -15,72 +17,54 @@ export function removeComments(text: string): string {
 
 
 export async function* fetchApiInitStatus(
-    oldC: TableSettings,
-    newC: TableSettings,
-    onError?: () => void,
+    credentials: ApiInitStatus = {},
 ): AsyncGenerator<ApiInitStatus, void, unknown> {
-    // Determine which platforms need to be initialized based on changes in settings
-    let todo: ApiInitStatus = {};
-    for (const p of Platform) {
-        const key = `cookie_${p}` as keyof TableSettings;
-        if (oldC[key] !== newC[key] && newC[key]) {
-            todo[p] = newC[key] as string;
-        }
-    }
+    const response = await api.post("/api/init/api", { json: credentials, timeout: false });
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("The initialization response has no body.");
 
-    // If no platforms need to be initialized, throw an error
-    if (Object.keys(todo).length === 0) {
-        onError?.();
-        pushMsg("No changes detected.", "info");
-        throw new Error("No changes detected.");
-    }
-
-    // Fetch the initialization status from the API
-    const decoder = new TextDecoder("utf-8");
-    const reader = (
-        await api.post("/api/init/api", {
-            json: todo,
-            timeout: false
-        })
-    ).body?.getReader()!;
-    if (reader === undefined) {
-        onError?.();
-        pushMsg("Response body is empty", "error");
-        throw new Error("Response body is empty");
-    }
-
-    // Read the response stream and yield the parsed JSON lines
+    const decoder = new TextDecoder();
     let buffer = "";
-    let errorOccurred = false;
-    while (true) {
-        try {
+    let last: ApiInitStatus | undefined;
+    let finished = false;
+    const parse = (line: string): ApiInitStatus => {
+        const value: unknown = JSON.parse(line);
+        if (!value || typeof value !== "object" || Array.isArray(value)
+            || Object.values(value).some(item => item !== null && typeof item !== "string")) {
+            throw new Error("Invalid initialization status response.");
+        }
+        return value as ApiInitStatus;
+    };
+    try {
+        while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
-
+            if (done) {
+                finished = true;
+                break;
+            }
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
-
             for (const line of lines) {
                 if (!line.trim()) continue;
-                yield JSON.parse(line);
+                last = parse(line);
+                yield last;
             }
         }
-        catch (error) {
-            pushError(error, "API Initialization Progress");
-            errorOccurred = true;
+        buffer += decoder.decode();
+        if (buffer.trim()) {
+            last = parse(buffer);
+            yield last;
         }
-    }
-
-    // Process any remaining buffer after the stream is done
-    buffer += decoder.decode();
-    if (buffer.trim()) {
-        yield JSON.parse(buffer);
-    }
-
-    // If any errors occurred during the process, throw an error to indicate failure
-    if (errorOccurred) {
-        onError?.();
-        throw new Error("An error occurred during the API initialization process.");
+        if (!last || Object.values(last).some(value => value === "")) {
+            throw new Error("Initialization ended before all APIs reported a result.");
+        }
+        const failures = Object.entries(last).filter(([, value]) => value != null && value !== "true" && value !== "false");
+        if (failures.length) {
+            throw new Error(failures.map(([key, value]) => `${key}: ${value}`).join("; "));
+        }
+    } finally {
+        if (!finished) await reader.cancel();
+        reader.releaseLock();
     }
 }

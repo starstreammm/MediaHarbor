@@ -1,0 +1,9 @@
+CREATE TABLE IF NOT EXISTS queue (
+    uid BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    alias TEXT NOT NULL,
+    job JSONB NOT NULL,
+    scheduled TIMESTAMPTZ NOT NULL,
+    status status NOT NULL DEFAULT 'pending',
+    detail JSONB,
+    create_time TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

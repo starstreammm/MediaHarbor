@@ -3,18 +3,16 @@ import {
     ButtonBase,
     IconButton,
     TextField,
-    CircularProgress,
-    Tooltip,
     Typography,
 } from "@mui/material";
 import CancelRoundedIcon from '@mui/icons-material/CancelRounded';
 import DoneAllRoundedIcon from '@mui/icons-material/DoneAllRounded';
-import ReportGmailerrorredRoundedIcon from '@mui/icons-material/ReportGmailerrorredRounded';
 import AddCircleRoundedIcon from '@mui/icons-material/AddCircleRounded';
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useRef, useState, type Dispatch, type SetStateAction } from "react";
 
-import { Platform } from "~/model/enum";
+import type { ApiUrlCheck, UrlCheckState } from "~/model/api";
+import UrlCheckStatus from "./url_check_status";
 import { pushMsg } from "~/components/error_popout";
 import { urlRegex } from "~/model/const";
 
@@ -24,9 +22,9 @@ function exeUrls(urls: string) {
     if (matches) {
         return {
             ...matches.reduce((acc, url) => {
-                acc[url] = "loading";
+                acc[url] = { status: "checking" };
                 return acc;
-            }, {} as Record<string, string>)
+            }, {} as Record<string, UrlCheckState>)
         };
     }
     else {
@@ -37,15 +35,16 @@ function exeUrls(urls: string) {
 
 export default function UrlInsert({ open, urls, onChange, checkUrl, optional }: {
     open: boolean;
-    urls: Record<string, string>;
-    onChange: Dispatch<SetStateAction<Record<string, string>>>;
-    checkUrl: (url: string) => Promise<string>;
+    urls: Record<string, UrlCheckState>;
+    onChange: Dispatch<SetStateAction<Record<string, UrlCheckState>>>;
+    checkUrl: (url: string) => Promise<ApiUrlCheck>;
     optional?: (url: string) => React.ReactNode;
 }) {
-    if (!open) return null;
-
     const [add, setAdd] = useState(false);
     const [urlsInput, setUrlsInput] = useState<string>("");
+    const requests = useRef<Record<string, number>>({});
+
+    if (!open) return null;
 
     const addUrls = (urls: string) => {
         setAdd(false);
@@ -53,9 +52,12 @@ export default function UrlInsert({ open, urls, onChange, checkUrl, optional }: 
         const newUrls = exeUrls(urls);
         onChange(prev => ({ ...prev, ...newUrls }));
         Object.keys(newUrls).forEach((url) => {
+            const request = (requests.current[url] ?? 0) + 1;
+            requests.current[url] = request;
             checkUrl(url)
                 .then((res) => {
-                    onChange((prev) => ({ ...prev, [url]: res }));
+                    if (requests.current[url] !== request) return;
+                    onChange((prev) => url in prev ? { ...prev, [url]: res } : prev);
                 });
         });
     }
@@ -119,13 +121,14 @@ export default function UrlInsert({ open, urls, onChange, checkUrl, optional }: 
                         pl: 0.5,
                     }}>
                         <IconButton onClick={() => {
+                            requests.current[u] = (requests.current[u] ?? 0) + 1;
                             const newUrls = { ...urls };
                             delete newUrls[u];
                             onChange(newUrls);
                         }}>
                             <CancelRoundedIcon color="error" />
                         </IconButton>
-                        <Typography sx={{ width: "100%", overflowWrap: "anywhere", }}>
+                        <Typography color={urls[u].status !== "passed" ? "textDisabled" : "textPrimary"} sx={{ width: "100%", overflowWrap: "anywhere", }}>
                             {u}
                         </Typography>
                         <Box sx={{
@@ -135,19 +138,8 @@ export default function UrlInsert({ open, urls, onChange, checkUrl, optional }: 
                             minWidth: 88,
                             gap: { xs: 1, md: 3 },
                         }}>
-                            {optional && optional(u)}
-                            {urls[u] === "loading"
-                                ? <Tooltip title="Checking...">
-                                    <CircularProgress size={24} />
-                                </Tooltip>
-                                : Platform.includes(urls[u] as Platform)
-                                    ? <Typography variant="body1" color="success" sx={{ pr: 1 }}>
-                                        {urls[u].toUpperCase()}
-                                    </Typography>
-                                    : <Tooltip title={urls[u]} placement="top" arrow>
-                                        <ReportGmailerrorredRoundedIcon color="error" />
-                                    </Tooltip>
-                            }
+                            {urls[u].status === "passed" && optional?.(u)}
+                            <UrlCheckStatus result={urls[u]} />
                         </Box>
                     </Box>
                 ))

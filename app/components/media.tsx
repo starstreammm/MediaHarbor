@@ -1,15 +1,18 @@
-import { Box, Backdrop, type SxProps, type Theme } from "@mui/material";
+import { Alert, Box, Backdrop, type SxProps, type Theme } from "@mui/material";
 import {
     MediaPlayer,
     MediaProvider,
+    isHLSProvider,
     type MediaPlayerInstance,
     type MediaPlayerProps,
 } from "@vidstack/react";
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
-import { defaultLayoutIcons, DefaultVideoLayout } from '@vidstack/react/player/layouts/default';
+export { FullPlayer } from "./player/player";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFileInfo } from "~/hooks/file-info";
+import { useMediaRetry } from "./player/use-media-retry";
 
 import type { FileType } from "~/model/const";
 import { pushError } from "~/components/error_popout";
@@ -46,6 +49,8 @@ export function ImageBox({ uid, sx, onClick, hover }: {
     onClick?: () => void;
     hover?: boolean;
 }) {
+    const info = useFileInfo(uid);
+    if (info.data?.exist === false) return <Alert severity="warning" onClick={onClick}>File missing from storage.</Alert>;
     return (
         <Box
             component="img"
@@ -100,29 +105,49 @@ export function ImageViewer({ uid, sx, full = false }: { uid: number; sx?: SxPro
 }
 
 export function HoverPlayer({ uid, sx }: { uid: number; sx?: MediaPlayerProps["style"] }) {
+    const info = useFileInfo(uid);
     const player = useRef<MediaPlayerInstance>(null);
     const [activated, setActivated] = useState(false);
     const [hovered, setHovered] = useState(false);
+    const recovery = useMediaRetry(uid, hovered);
+    const [playbackError, setPlaybackError] = useState<string | null>(null);
+    const rewindTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => {
+        if (rewindTimer.current) clearTimeout(rewindTimer.current);
+    }, []);
+
+    const play = () => {
+        if (!hovered) return;
+        void player.current?.play().catch((error: Error) => {
+            // Leaving the card or replacing a failed source aborts pending playback.
+            if (error.name !== "AbortError") setPlaybackError(error.message);
+        });
+    };
+
+    useEffect(() => {
+        if (hovered && player.current?.state.canPlay) play();
+    }, [hovered]);
 
     const handleMouseEnter = () => {
+        if (rewindTimer.current) clearTimeout(rewindTimer.current);
+        setPlaybackError(null);
         setHovered(true);
-
-        if (!activated) {
-            setActivated(true);
-        } else {
-            player.current?.play();
-        }
+        setActivated(true);
+        if (recovery.error && !recovery.retrying) recovery.retry();
     };
 
     const handleMouseLeave = () => {
         setHovered(false);
-        player.current?.pause();
-        setTimeout(() => {
+        void player.current?.pause().catch((error: Error) => setPlaybackError(error.message));
+        rewindTimer.current = setTimeout(() => {
             if (player.current)
                 player.current.currentTime = 0;
         }, 333);
     };
 
+
+    if (info.data?.exist === false) return <Alert severity="warning">File missing from storage.</Alert>;
 
     return (
         <Box
@@ -188,6 +213,7 @@ export function HoverPlayer({ uid, sx }: { uid: number; sx?: MediaPlayerProps["s
                     }}
                 >
                     <MediaPlayer
+                        key={`${uid}:${recovery.attempt}`}
                         ref={player}
                         src={{
                             src: `/api/file/${uid}`,
@@ -200,11 +226,17 @@ export function HoverPlayer({ uid, sx }: { uid: number; sx?: MediaPlayerProps["s
                             maxHeight: "100%",
                             ...sx,
                         }}
-                        onCanPlay={() => {
-                            setTimeout(() => {
-                                player.current?.play();
-                            }, 88);
+                        onProviderChange={(provider) => {
+                            if (isHLSProvider(provider)) provider.library = () => import("hls.js");
                         }}
+                        onError={recovery.onError}
+                        onCanPlay={play}
+                        onPlaying={() => {
+                            recovery.onPlaying();
+                            setPlaybackError(null);
+                            if (!hovered) void player.current?.pause().catch((error: Error) => setPlaybackError(error.message));
+                        }}
+                        load="eager"
                         playsInline
                         muted
                     >
@@ -216,61 +248,21 @@ export function HoverPlayer({ uid, sx }: { uid: number; sx?: MediaPlayerProps["s
                             }}
                         />
                     </MediaPlayer>
+                    {hovered && (recovery.error || playbackError) && <Box
+                        role="status"
+                        sx={{ position: "absolute", inset: 0, display: "grid", placeContent: "center", gap: 1, p: 2, color: "white", bgcolor: "rgba(0, 0, 0, 0.7)", textAlign: "center" }}
+                    >
+                        {recovery.retrying ? "Preparing video… Retrying" : <>
+                            <span>{recovery.error?.message ?? playbackError}</span>
+                            <button onClick={(event) => {
+                                event.stopPropagation();
+                                setPlaybackError(null);
+                                recovery.retry();
+                            }}>Retry</button>
+                        </>}
+                    </Box>}
                 </Box>
             )}
-        </Box>
-    );
-}
-
-export function FullPlayer({ uid, sx }: { uid: number; sx?: MediaPlayerProps["style"] }) {
-    const player = useRef<MediaPlayerInstance>(null);
-
-    return (
-        <Box sx={{
-            position: "absolute",
-            inset: 0,
-
-            width: "100%",
-            height: "100%",
-
-            bgcolor: "black",
-            overflow: "hidden",
-
-            "& [data-media-provider]": {
-                width: "100%",
-                height: "100%",
-            },
-
-            "& [data-media-provider] video": {
-                display: "block",
-
-                width: "100%",
-                height: "100%",
-
-                maxWidth: "100%",
-                maxHeight: "100%",
-
-                objectFit: "contain",
-            },
-        }}>
-            <MediaPlayer
-                ref={player}
-                src={{ src: `/api/file/${uid}`, type: "application/x-mpegurl" }}
-                style={{
-                    width: "100%",
-                    height: "100%",
-                    ...sx,
-                }}
-                onCanPlay={() => {
-                    setTimeout(() => {
-                        player.current?.play();
-                    }, 88);
-                }}
-                playsInline
-            >
-                <MediaProvider />
-                <DefaultVideoLayout thumbnails="https://files.vidstack.io/sprite-fight/thumbnails.vtt" icons={defaultLayoutIcons} />
-            </MediaPlayer>
         </Box>
     );
 }

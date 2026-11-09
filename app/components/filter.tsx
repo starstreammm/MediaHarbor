@@ -48,15 +48,16 @@ const disabled: Record<Layer, string[]> = {
 
 
 
-export function FilterSetter({ open, setValue, setClose, layer }: {
+export function FilterSetter({ open, setValue, setClose, layer, value }: {
     open: boolean;
+    value: CursorFilter;
     setValue: (filter: CursorFilter) => void;
     setClose: () => void;
     layer: Layer;
 }) {
     const [extend, setExtend] = useState(-1);
-    const [filter, setFilter] = useState<CursorFilter>({});
-    const [include, setInclude] = useState<string[]>([]);
+    const [filter, setFilter] = useState<CursorFilter>(value);
+    const [include, setInclude] = useState<string[]>(Object.keys(value));
 
     return (
         <Dialog open={open} onClose={setClose} fullWidth>

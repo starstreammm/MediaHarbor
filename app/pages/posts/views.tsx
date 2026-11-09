@@ -29,10 +29,9 @@ import { useState, type SetStateAction, type Dispatch, useEffect } from "react";
 import type { TablePost } from "~/model/table";
 import { GridCardContainer, GridCardItem } from "~/hooks/card_view";
 import { downloadFile } from "~/hooks/file";
-import { PostView } from "~/components/post/view_index";
+import { usePostPreview } from "~/components/post/preview";
 import PostRating from "~/components/post/rating";
 import DeleteConfirmDialog from "~/components/delete_confirm";
-import { pushMsg } from "~/components/error_popout";
 import { HoverPlayer } from "~/components/media";
 import { CollectionsPageCore } from "~/pages/collections/index";
 import { updateCollections } from "~/function/collection";
@@ -151,46 +150,24 @@ function ActionList({ post, setData, anchorEl, onClose }: {
 }
 
 
-export function ViewCore({ component, data, setData }: {
+export function ViewCore({ component, data, setData, onClick }: {
     component: (
-        setOpenIndex: Dispatch<SetStateAction<number | null>>,
+        setOpenIndex: (index: number) => void,
         setActionAnchor: Dispatch<SetStateAction<[HTMLElement, number] | null>>
     ) => React.ReactElement;
     data: TablePost[];
     setData: Dispatch<SetStateAction<TablePost[]>>;
+    onClick?: (post: TablePost) => void;
 }) {
-    const [openIndex, setOpenIndex] = useState<number | null>(null);
+    const openPost = usePostPreview(data, setData, !onClick);
+    const setOpenIndex = (index: number) => {
+        if (onClick) onClick(data[index]);
+        else openPost(index);
+    };
     const [actionAnchor, setActionAnchor] = useState<[HTMLElement, number] | null>(null);
 
     return (
         <>
-            {openIndex !== null &&
-                <PostView
-                    post={data[openIndex]}
-                    setPost={(newPost) => setData((prev) => prev.map((p) => p.uid === newPost.uid ? newPost : p))}
-                    onClose={() => setOpenIndex(null)}
-                    onNext={() => setOpenIndex((prev) => {
-                        if (prev === null)
-                            return null;
-                        if (prev < data.length - 1)
-                            return prev + 1;
-                        else {
-                            pushMsg("This is the last post.", "info");
-                            return prev;
-                        }
-                    })}
-                    onLast={() => setOpenIndex((prev) => {
-                        if (prev === null)
-                            return null;
-                        if (prev > 0)
-                            return prev - 1;
-                        else {
-                            pushMsg("This is the first post.", "info");
-                            return prev;
-                        }
-                    })}
-                />
-            }
             <ActionList
                 post={actionAnchor !== null ? data[actionAnchor[1]] : null}
                 setData={setData}
@@ -203,9 +180,10 @@ export function ViewCore({ component, data, setData }: {
 }
 
 
-export function ListView({ data, setData }: {
+export function ListView({ data, setData, onClick }: {
     data: TablePost[];
     setData: Dispatch<SetStateAction<TablePost[]>>;
+    onClick?: (post: TablePost) => void;
 }) {
     return (
         <ViewCore component={(setOpenIndex, setActionAnchor) =>
@@ -260,14 +238,15 @@ export function ListView({ data, setData }: {
                     </TableBody>
                 </Table>
             </TableContainer>
-        } data={data} setData={setData} />
+        } data={data} setData={setData} onClick={onClick} />
     );
 }
 
 
-export function CardView({ data, setData }: {
+export function CardView({ data, setData, onClick }: {
     data: TablePost[];
     setData: Dispatch<SetStateAction<TablePost[]>>;
+    onClick?: (post: TablePost) => void;
 }) {
     const [cover, setCover] = useState<number[]>([]);
     const [size, setSize] = useState(3);
@@ -363,6 +342,6 @@ export function CardView({ data, setData }: {
                     </GridCardItem>
                 ))}
             </GridCardContainer>
-        } data={data} setData={setData} />
+        } data={data} setData={setData} onClick={onClick} />
     );
 }

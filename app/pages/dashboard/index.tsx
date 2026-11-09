@@ -1,29 +1,41 @@
 import {
+    Alert,
     Box,
+    Button,
     Fab,
-    Grid,
     Divider,
+    LinearProgress,
     Typography,
-    Tooltip,
 } from "@mui/material";
-import InfoOutlineRoundedIcon from '@mui/icons-material/InfoOutlineRounded';
-import NotInterestedRoundedIcon from '@mui/icons-material/NotInterestedRounded';
-import ErrorRoundedIcon from '@mui/icons-material/ErrorRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
+import PlayCircleRoundedIcon from "@mui/icons-material/PlayCircleRounded";
+import ScheduleRoundedIcon from "@mui/icons-material/ScheduleRounded";
+import ErrorRoundedIcon from "@mui/icons-material/ErrorRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 
-import { useOutletContext } from "react-router";
+import { Link, useOutletContext } from "react-router";
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, Fragment } from "react";
+import { useEffect, useState, Fragment, type ReactNode } from "react";
 
 import { api } from "../../hooks/api";
-import { useStatus } from "../../hooks/status";
 import { pushError, pushMsg } from "~/components/error_popout";
 import type { TableStatistics, ApiDeviceStatistics } from '../../model/status';
+import type { ApiPlatformRegistration } from "~/model/api";
 
-import { Card, DataTable } from '~/pages/dashboard/components';
+import { Card, CardGrid, StatisticCard } from '~/pages/dashboard/components';
 import AppBar from "~/components/appbar";
 import { FileLineChart, PostLineChart, ShowChart } from "~/pages/dashboard/linechart";
-import { formatBytes } from "~/function/dashboard";
+import { formatBytes, platformLabels, postCount } from "~/function/dashboard";
+import { Platform } from "~/model/enum";
+import { CardLayoutControl, useCardLayout } from "~/components/card_layout";
+import ApiHealthCard from "./api-health-card";
+
+const DASHBOARD_CARDS = [
+    { id: "files-video", label: "Videos" },
+    { id: "files-photo", label: "Images" },
+    { id: "device", label: "Device information" },
+    { id: "queue", label: "Queue Status" },
+    { id: "api-health", label: "API Health" },
+];
 
 
 export default function Dashboard() {
@@ -34,6 +46,17 @@ export default function Dashboard() {
             mobilDrawer: () => void,
         }>();
 
+    const catalog = useQuery({
+        queryKey: ["api-catalog"],
+        queryFn: () => api.get("/api/init/api/catalog").json<ApiPlatformRegistration[]>(),
+        retry: false,
+        refetchInterval: 30000,
+    });
+    const supportedPlatforms = Platform.filter(platform => catalog.data?.some(item => item.key === platform));
+    const layout = useCardLayout("dashboard-cards:v1", [
+        ...supportedPlatforms.map(platform => ({ id: `posts-${platform}`, label: `${platformLabels[platform]} posts` })),
+        ...DASHBOARD_CARDS,
+    ]);
     const [history, setHistory] = useState<TableStatistics[]>([]);
     const [today, setToday] = useState<TableStatistics>({
         post_len_douyin: 0,
@@ -48,8 +71,14 @@ export default function Dashboard() {
         file_size_photo: 0,
         date: "",
     });
-    const [device, setDevice] = useState<ApiDeviceStatistics>();
-    const { api_status } = useStatus().data || {};
+    const deviceQuery = useQuery({
+        queryKey: ["dashboard_device"],
+        queryFn: () => api.get("/api/statistics/device").json<ApiDeviceStatistics>(),
+        retry: false,
+        refetchInterval: 18000,
+        refetchIntervalInBackground: false,
+    });
+    const device = deviceQuery.data;
 
     useQuery({
         queryKey: ["dashboard_data"],
@@ -57,8 +86,6 @@ export default function Dashboard() {
             try {
                 const tres = await api.get("/api/statistics/today").json<TableStatistics>();
                 setToday(tres);
-                const dres = await api.get("/api/statistics/device").json<ApiDeviceStatistics>();
-                setDevice(dres);
             }
             catch {
                 pushMsg("Failed to refresh dashboard data.", "warning");
@@ -71,17 +98,6 @@ export default function Dashboard() {
     });
 
 
-    const calPostTotal = (day: TableStatistics) => {
-        return Object.entries(day)
-            .filter(([key]) => key.startsWith("post_len_"))
-            .reduce((acc, [_, value]) => acc + value, 0);
-    }
-    const calFileTotal = (day: TableStatistics, len: boolean) => {
-        return len
-            ? day.file_len_photo + day.file_len_video
-            : day.file_size_photo + day.file_size_video;
-    }
-
     useEffect(() => {
         api.get("/api/statistics/all").json<TableStatistics[]>()
             .then((data) => setHistory(data))
@@ -89,189 +105,143 @@ export default function Dashboard() {
     }, []);
 
 
+    const cards: Record<string, ReactNode> = {
+        "device": (
+            <Card>
+                <Box sx={{
+                    display: 'flex',
+                    height: "100%",
+                    width: "100%",
+                }}>
+                    <Box sx={{
+                        display: 'flex',
+                        width: "38.2%",
+                        height: "100%",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                        p: 3,
+                    }}>
+                        <Typography variant="h5" sx={{ fontWeight: "1000", }}>
+                            Device Information
+                        </Typography>
+                        <Fab
+                            variant="extended"
+                            color="primary"
+                            disabled
+                            sx={{ mb: 8 }}
+                        >
+                            Check for Updates
+                        </Fab>
+                    </Box>
+                    <Divider orientation="vertical" />
+                    <Box sx={{
+                        display: 'flex',
+                        width: "61.8%",
+                        height: "100%",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
+                    }}>
+                        {[
+                            ["OS", device?.os],
+                            ["CPU", device?.cpu],
+                            ["Memory", device?.memory],
+                            ["Uptime", device?.uptime],
+                            ["Version", device?.version]
+                        ].map(([key, value]) => (
+                            <Fragment key={key}>
+                                <Box key={key} sx={{ height: "20%", display: "flex", alignItems: "center", pl: 3, }}>
+                                    <Typography variant="body1">
+                                        <b>{key}:</b> {value ?? "N/A"}
+                                    </Typography>
+                                </Box>
+                                <Divider />
+                            </Fragment>
+                        ))}
+                    </Box>
+                </Box>
+            </Card>
+        ),
+        "queue": (
+            <Card>
+                <Box sx={{ display: "flex", flexDirection: "column", height: "100%", gap: 1.5, p: { xs: 2, sm: 3 }, overflowY: "auto" }}>
+                    <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
+                        <Typography component="h2" sx={{ fontSize: { xs: "1rem", sm: "1.125rem" }, fontWeight: 700 }}>Queue Status</Typography>
+                        <Button component={Link} to="/tasks" size="small">View tasks</Button>
+                    </Box>
+                    {deviceQuery.isPending && <LinearProgress aria-label="Loading queue status" />}
+                    {deviceQuery.isError && <Alert severity="error" action={
+                        <Button onClick={() => { void deviceQuery.refetch(); }}>Retry</Button>
+                    }>Could not refresh queue status.</Alert>}
+                    <Box sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1.5, flex: "1 0 auto" }}>
+                        {[
+                            { label: "Running", value: device?.queue_running, color: "primary.main", icon: <PlayCircleRoundedIcon fontSize="small" /> },
+                            { label: "Pending", value: device?.queue_pending, color: "warning.main", icon: <ScheduleRoundedIcon fontSize="small" /> },
+                            { label: "Failed", value: device?.queue_error, color: "error.main", icon: <ErrorRoundedIcon fontSize="small" /> },
+                            { label: "Completed", value: device?.queue_success, color: "success.main", icon: <CheckCircleRoundedIcon fontSize="small" /> },
+                        ].map(item => (
+                            <Box key={item.label} sx={{ minWidth: 0, border: 1, borderColor: "divider", borderRadius: 2, p: { xs: 1, sm: 1.5 } }}>
+                                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75, color: item.color }}>
+                                    {item.icon}
+                                    <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: "anywhere" }}>{item.label}</Typography>
+                                </Box>
+                                <Typography sx={{ mt: 0.5, fontSize: { xs: "1.375rem", sm: "1.75rem" }, fontWeight: 700, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>
+                                    {item.value?.toLocaleString() ?? "—"}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </Box>
+                    <Typography variant="caption" color="text.secondary">Pending includes scheduled tasks.</Typography>
+                </Box>
+            </Card>
+        ),
+        "api-health": <ApiHealthCard />,
+    };
+
+    const chartData = [...history].reverse().concat(today.date ? [today] : []);
+    for (const platform of supportedPlatforms) {
+        const label = platformLabels[platform];
+        cards[`posts-${platform}`] = (
+            <StatisticCard title={label} metrics={[
+                { label: "Posts", value: postCount(today, platform).toLocaleString() },
+                { label: "Creators", value: today.creator_counts ? (today.creator_counts[platform] ?? 0).toLocaleString() : "—" },
+            ]}>
+                <ShowChart title={`${label} Post Statistics`}>
+                    <PostLineChart data={chartData} platform={platform} />
+                </ShowChart>
+            </StatisticCard>
+        );
+    }
+    for (const kind of ["video", "photo"] as const) {
+        const label = kind === "video" ? "Videos" : "Images";
+        cards[`files-${kind}`] = (
+            <StatisticCard title={label} metrics={[
+                { label: "Files", value: today[`file_len_${kind}`].toLocaleString() },
+                { label: "Storage", value: formatBytes(today[`file_size_${kind}`]) },
+            ]}>
+                <ShowChart title={`${label} Statistics`}>
+                    <FileLineChart data={chartData} kind={kind} />
+                </ShowChart>
+            </StatisticCard>
+        );
+    }
+
     return (
         <>
-            <AppBar mobilDrawer={mobilDrawer} label="Dashboard" button={null} />
-            <Grid container spacing={{ xs: 1, md: 3 }} sx={{ m: { xs: 1, md: 3 } }}>
-                <Card>
-                    <Box sx={{
-                        display: 'flex',
-                        height: "38%",
-                        alignItems: 'center',
-                        flexDirection: 'row',
-                        justifyContent: 'space-evenly',
-                    }}>
-                        <DataTable width='34%' title={["Posts"]} data={[`Total: ${calPostTotal(today)}`]} />
-                        <Divider orientation='vertical' flexItem />
-                        <DataTable width='22%' title={["Douyin", "X"]} data={[String(today.post_len_douyin), String(today.post_len_x)]} />
-                        <Divider orientation='vertical' flexItem />
-                        <DataTable width='22%' title={["Bilibili", "Ins"]} data={[String(today.post_len_bilibili), String(today.post_len_ins)]} />
-                        <Divider orientation='vertical' flexItem />
-                        <DataTable width='22%' title={["XHS", "Youtube"]} data={[String(today.post_len_xhs), String(today.post_len_youtube)]} />
-                    </Box>
-                    <Divider flexItem />
-                    <ShowChart title="Post Statistics Details" height="62%">
-                        <PostLineChart data={[today, ...history].reverse()} />
-                    </ShowChart>
-                </Card>
-                <Card>
-                    <Box sx={{
-                        display: 'flex',
-                        height: "38%",
-                        alignItems: 'center',
-                        flexDirection: 'row',
-                        justifyContent: 'space-evenly',
-                    }}>
-                        <DataTable width='38%' title={["Files"]} data={[`Total: ${calFileTotal(today, true)}/${formatBytes(calFileTotal(today, false))}`]} />
-                        <Divider orientation='vertical' flexItem />
-                        <DataTable width='31%' title={["Video"]} data={[`${today.file_len_video}/${formatBytes(today.file_size_video)}`]} />
-                        <Divider orientation='vertical' flexItem />
-                        <DataTable width='31%' title={["Photo"]} data={[`${today.file_len_photo}/${formatBytes(today.file_size_photo)}`]} />
-                    </Box>
-                    <Divider flexItem />
-                    <ShowChart title="File Statistics Details" height="62%">
-                        <FileLineChart data={[today, ...history].reverse()} />
-                    </ShowChart>
-                </Card>
-                <Card>
-                    <Box sx={{
-                        display: 'flex',
-                        height: "100%",
-                        width: "100%",
-                    }}>
-                        <Box sx={{
-                            display: 'flex',
-                            width: "38.2%",
-                            height: "100%",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                            p: 3,
-                        }}>
-                            <Typography variant="h5" sx={{ fontWeight: "1000", }}>
-                                Device Information
-                            </Typography>
-                            <Fab
-                                variant="extended"
-                                color="primary"
-                                disabled
-                                sx={{ mb: 8 }}
-                            >
-                                Check for Updates
-                            </Fab>
-                        </Box>
-                        <Divider orientation="vertical" />
-                        <Box sx={{
-                            display: 'flex',
-                            width: "61.8%",
-                            height: "100%",
-                            flexDirection: "column",
-                            justifyContent: "space-between",
-                        }}>
-                            {[
-                                ["OS", device?.os],
-                                ["CPU", device?.cpu],
-                                ["Memory", device?.memory],
-                                ["Uptime", device?.uptime],
-                                ["Version", device?.version]
-                            ].map(([key, value]) => (
-                                <Fragment key={key}>
-                                    <Box key={key} sx={{ height: "20%", display: "flex", alignItems: "center", pl: 3, }}>
-                                        <Typography variant="body1">
-                                            <b>{key}:</b> {value ?? "N/A"}
-                                        </Typography>
-                                    </Box>
-                                    <Divider />
-                                </Fragment>
-                            ))}
-                        </Box>
-                    </Box>
-                </Card>
-                <Card>
-                    <Box sx={{
-                        display: 'flex',
-                        height: "100%",
-                        width: "100%",
-                        flexDirection: "row",
-                    }}>
-                        <Box sx={{
-                            display: 'flex',
-                            height: "100%",
-                            width: "60%",
-                            flexDirection: "column",
-                            pt: 2,
-                            pl: 1.5,
-                        }}>
-                            <Typography variant="h5" sx={{ fontWeight: "1000", }}>
-                                Plateform Support
-                            </Typography>
-                            <Box sx={{
-                                display: 'flex',
-                                height: "100%",
-                                width: "100%",
-                                flexDirection: "column",
-                                justifyContent: "space-evenly",
-                            }}>
-                                {([
-                                    ["Douyin", api_status?.douyin],
-                                    ["Bilibili", api_status?.bilibili],
-                                    ["XHS", api_status?.xhs],
-                                    ["X", api_status?.x],
-                                    ["Instagram", api_status?.ins],
-                                    ["YouTube", api_status?.youtube],
-                                ] as [string, boolean | undefined | null][]).map(([name, stat]) => (
-                                    <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                                        {stat === null || stat === undefined ?
-                                            <NotInterestedRoundedIcon color="disabled" />
-                                            : stat === false
-                                                ? <Tooltip title="The cookie is updated 30 days ago. Please update it, or its stability will decline.">
-                                                    <ErrorRoundedIcon color="warning" />
-                                                </Tooltip>
-                                                : <CheckCircleRoundedIcon color="success" />
-                                        }
-                                        <Typography variant="subtitle1">
-                                            {name}
-                                        </Typography>
-                                    </Box>
-                                ))}
-                            </Box>
-                        </Box>
-                        <Divider orientation="vertical" />
-                        <Box sx={{
-                            display: 'flex',
-                            height: "100%",
-                            width: "40%",
-                            flexDirection: "column",
-                            pt: 2,
-                            pl: 1.5,
-                        }}>
-                            <Typography variant="h5" sx={{ fontWeight: "1000", }}>
-                                Queue Status
-                            </Typography>
-                            <Box sx={{
-                                display: 'flex',
-                                height: "100%",
-                                width: "100%",
-                                flexDirection: "column",
-                                justifyContent: "space-evenly",
-                            }}>
-                                {([
-                                    ["Running", device?.queue_running],
-                                    ["Pending", device?.queue_pending],
-                                    ["Error", device?.queue_error],
-                                    ["Success", device?.queue_success],
-                                ] as [string, number | undefined][]).map(([name, stat]) => (
-                                    <Box key={name} sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                                        <InfoOutlineRoundedIcon color="info" />
-                                        <Typography variant="subtitle1">
-                                            <b>{name}</b>: {stat ?? "N/A"}
-                                        </Typography>
-                                    </Box>
-                                ))}
-                            </Box>
-                        </Box>
-                    </Box>
-                </Card>
-            </Grid >
+            <AppBar mobilDrawer={mobilDrawer} label="Dashboard" button={
+                <CardLayoutControl layout={layout} label="Customize dashboard" disabled={!catalog.isSuccess} />
+            } />
+            <Box sx={{ p: { xs: 1, md: 3 } }}>
+                {catalog.isPending && <LinearProgress aria-label="Loading supported platforms" sx={{ mb: 2 }} />}
+                {catalog.isError && <Alert severity="error" sx={{ mb: 2 }} action={
+                    <Button onClick={() => { void catalog.refetch(); }}>Retry</Button>
+                }>Could not load supported platforms.</Alert>}
+                {layout.visibleIds.length === 0 && <Alert severity="info">
+                    All cards are hidden. Use Customize dashboard to show cards again.
+                </Alert>}
+                <CardGrid>
+                    {layout.visibleIds.map(id => <Fragment key={id}>{cards[id]}</Fragment>)}
+                </CardGrid>
+            </Box>
         </>
-    )
+    );
 }

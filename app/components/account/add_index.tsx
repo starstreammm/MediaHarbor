@@ -15,7 +15,7 @@ import { useColorScheme } from '@mui/material/styles';
 import { useRef, useState } from "react";
 
 import type { ApiAccountParse, ApiAccountInsert, InsertRef, ApiAccountCreate } from "~/model/api";
-import { pushTaskSuccess } from "~/components/error_popout";
+import { pushTaskSuccess, pushError, pushMsg } from "~/components/error_popout";
 import UrlInsert from "./url";
 import ManualInsert from "./manual";
 import ParserInsert from "./parser";
@@ -33,6 +33,10 @@ export default function AddAccountDialog({ onSubmit, onRes, creator_uid = -1 }: 
     // state
     const [type, setType] = useState("bulk");
     const [loading, setLoading] = useState(false);
+    const [bulkReady, setBulkReady] = useState(false);
+    const [parserReady, setParserReady] = useState(false);
+    const [manualReady, setManualReady] = useState(false);
+    const ready = type === "bulk" ? bulkReady : type === "parser" ? parserReady : manualReady;
 
     // data
     const urlRef = useRef<InsertRef<ApiAccountCreate[], number[]>>(null);
@@ -40,42 +44,44 @@ export default function AddAccountDialog({ onSubmit, onRes, creator_uid = -1 }: 
     const manualRef = useRef<InsertRef<ApiAccountInsert, number>>(null);
 
 
-    const onClose = (cancel: boolean) => {
+    const onClose = async (cancel: boolean) => {
+        if (loading) return;
         if (cancel) {
             onSubmit?.(undefined);
             onRes?.(undefined);
+            return;
         }
-        else {
+        if (!ready) return;
+        setLoading(true);
+        try {
             if (type === "bulk") {
                 onRes?.(urlRef.current?.resData());
-                if (onSubmit)
-                    urlRef.current?.submit()
-                        .then((res) => {
-                            onSubmit?.(res);
-                            pushTaskSuccess(`${res.length} account(s) added from URLs successfully.`);
-                        });
-            }
-            else if (type === "parser") {
+                if (onSubmit && urlRef.current) {
+                    const uids = await urlRef.current.submit();
+                    onSubmit(uids);
+                    pushTaskSuccess(`${uids.length} account import task(s) submitted.`);
+                }
+            } else if (type === "parser") {
                 onRes?.(parserRef.current?.resData());
-                if (onSubmit)
-                    parserRef.current?.submit()
-                        .then((res) => {
-                            onSubmit?.([res]);
-                            pushTaskSuccess(`Account added by parser successfully. Task UID: ${res}.`);
-                        });
-            }
-            else {
+                if (onSubmit && parserRef.current) {
+                    const uid = await parserRef.current.submit();
+                    onSubmit([uid]);
+                    pushTaskSuccess(`Account import task submitted. UID: ${uid}.`);
+                }
+            } else {
                 onRes?.(manualRef.current?.resData());
-                if (onSubmit) {
-                    manualRef.current?.submit()
-                        .then((res) => {
-                            onSubmit?.([res]);
-                            pushTaskSuccess(`Account added manually successfully. Task UID: ${res}.`);
-                        });
+                if (onSubmit && manualRef.current) {
+                    const uid = await manualRef.current.submit();
+                    onSubmit([uid]);
+                    pushMsg(`Account added successfully. UID: ${uid}.`, "success");
                 }
             }
+        } catch (error) {
+            pushError(error, "Add account");
+        } finally {
+            setLoading(false);
         }
-    }
+    };
 
 
     return (
@@ -93,7 +99,7 @@ export default function AddAccountDialog({ onSubmit, onRes, creator_uid = -1 }: 
                 <AppBar position="static">
                     <Tabs
                         value={type}
-                        onChange={(_, newValue) => setType(newValue)}
+                        onChange={(_, newValue) => { if (!loading) setType(newValue); }}
                         variant="fullWidth"
                         sx={(theme) => ({
                             "& .MuiTab-root.Mui-selected": {
@@ -122,20 +128,21 @@ export default function AddAccountDialog({ onSubmit, onRes, creator_uid = -1 }: 
                     py: { xs: 1, md: 1.5 },
                     px: { xs: 1, md: 3 },
                 }}>
-                    <UrlInsert open={type === "bulk"} creator_uid={creator_uid} ref={urlRef} />
-                    <ManualInsert open={type === "manual"} setType={setType} defaultValue={{ creator_uid } as ApiAccountParse} ref={manualRef} />
-                    <ParserInsert open={type === "parser"} defaultValue={{ creator_uid } as ApiAccountParse} ref={parserRef} />
+                    <UrlInsert open={type === "bulk"} creator_uid={creator_uid} ref={urlRef} onReady={setBulkReady} />
+                    <ManualInsert open={type === "manual"} setType={setType} defaultValue={{ creator_uid } as ApiAccountInsert} ref={manualRef} onReady={setManualReady} />
+                    <ParserInsert open={type === "parser"} defaultValue={{ creator_uid } as ApiAccountParse} ref={parserRef} onReady={setParserReady} />
                 </Box>
             </DialogContent>
             <DialogActions>
                 <Box sx={{ display: "flex", gap: 3, p: { xs: 1, md: 3 } }}>
-                    <Button onClick={() => onClose(true)} variant="outlined">
+                    <Button onClick={() => void onClose(true)} variant="outlined" disabled={loading}>
                         Cancel
                     </Button>
                     <Button
                         onClick={() => onClose(false)}
                         variant="contained"
                         loading={loading}
+                        disabled={!ready}
                     >
                         Apply
                     </Button>

@@ -25,7 +25,7 @@ import {
 } from "react";
 
 import type { InsertRef } from "~/model/api";
-import { pushMsg } from "~/components/error_popout";
+import { pushMsg, pushTaskSuccess } from "~/components/error_popout";
 import { PostsPageCore } from "~/pages/posts/index";
 import { createCollection, updateCollections } from "~/function/collection";
 import AddPostDialog from "../post/add_index";
@@ -163,8 +163,12 @@ export function AppendPostComponent({ uid, onChange }: {
                     onClose={() => setOpen(0)}
                     resData={(data) => {
                         updateCollections({ uid, add: Array.isArray(data) ? data : [data] })
-                            .then(() => onChange?.());
-                        pushMsg(`${Array.isArray(data) ? data.length : 1} Post${Array.isArray(data) ? "s" : ""} added to collection.`, "success");
+                            .then((taskUid) => {
+                                onChange?.();
+                                if (taskUid !== null) {
+                                    pushTaskSuccess(`Collection post import task submitted. UID: ${taskUid}.`);
+                                }
+                            });
                     }}
                 />
             }

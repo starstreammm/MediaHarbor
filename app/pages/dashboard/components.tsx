@@ -8,6 +8,7 @@ import {
     Grid,
     Divider,
     Skeleton,
+    Typography,
 } from "@mui/material";
 
 function TextBox({ children, height }: { children: React.ReactNode, height: string }) {
@@ -28,13 +29,18 @@ function TextBox({ children, height }: { children: React.ReactNode, height: stri
     )
 }
 
-export function Card({ children }: { children: React.ReactNode }) {
+export function CardGrid({ children }: { children: React.ReactNode }) {
+    return <Grid container spacing={{ xs: 1, md: 3 }} sx={{ alignItems: "flex-start" }}>{children}</Grid>;
+}
+
+export function Card({ children, autoHeight = false }: { children: React.ReactNode; autoHeight?: boolean }) {
     return (
-        <Grid size={{ xs: 12, lg: 6 }}>
+        <Grid size={{ xs: 12, lg: 6 }} sx={{ minWidth: 0 }}>
             <Paper elevation={3} sx={(theme) => ({
                 borderRadius: 4,
                 bgcolor: theme.vars?.palette.background.default,
-                height: {
+                overflow: "hidden",
+                height: autoHeight ? "auto" : {
                     xs: `calc(50vh - 30px - ${theme.spacing(1.5)})`,
                     md: `calc(50vh - 40px - ${theme.spacing(4.5)})`,
                 },
@@ -43,6 +49,38 @@ export function Card({ children }: { children: React.ReactNode }) {
             </Paper>
         </Grid>
     )
+}
+
+export function StatisticCard({ title, metrics, children }: {
+    title: string;
+    metrics: { label: string; value: string }[];
+    children: React.ReactNode;
+}) {
+    return (
+        <Card>
+            <Box sx={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
+                <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 2, px: { xs: 2, sm: 3 }, py: 1.5, flexShrink: 0 }}>
+                    <Typography component="h2" sx={{ flex: "1 1 5rem", minWidth: 0, fontSize: { xs: "1rem", sm: "1.125rem" }, fontWeight: 700, overflowWrap: "anywhere" }}>
+                        {title}
+                    </Typography>
+                    <Box component="dl" sx={{ m: 0, flex: "2 1 12rem", display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 2 }}>
+                        {metrics.map(metric => (
+                            <Box key={metric.label} sx={{ minWidth: 0 }}>
+                                <Typography component="dt" variant="body2" color="text.secondary">{metric.label}</Typography>
+                                <Typography component="dd" sx={{ m: 0, fontSize: { xs: "1.125rem", sm: "1.375rem" }, fontWeight: 700, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" }}>
+                                    {metric.value}
+                                </Typography>
+                            </Box>
+                        ))}
+                    </Box>
+                </Box>
+                <Divider />
+                <Box sx={{ flex: "1 0 7.5rem", minWidth: 0, px: 1, pt: 1, pb: 0.5 }}>
+                    {children}
+                </Box>
+            </Box>
+        </Card>
+    );
 }
 
 export function DataTable(

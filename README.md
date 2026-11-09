@@ -3,31 +3,30 @@
   <br />
   <br />
   <img alt="Node Current" src="https://img.shields.io/node/v/%40rolldown%2Fplugin-babel">
-  <img alt="Python Version" src="https://img.shields.io/badge/python-3.12%2B-blue">
+  <img alt="Python Version" src="https://img.shields.io/badge/python-3.14%2B-blue">
   <img alt="GitHub License" src="https://img.shields.io/github/license/starstreammm/MediaHarbor">
   <img alt="GitHub Release" src="https://img.shields.io/github/v/release/starstreammm/MediaHarbor">
-  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/starstreammm/MediaHarbor/release.yml?label=Release">
-	<img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/starstreammm/MediaHarbor/docker.yml?label=Docker">
+  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/starstreammm/MediaHarbor/publish.yml?label=Action">
   <br />
   <img alt="GitHub forks" src="https://img.shields.io/github/forks/starstreammm/MediaHarbor">
 	<img alt="GitHub Repo stars" src="https://img.shields.io/github/stars/starstreammm/MediaHarbor">
 	<img alt="GitHub Issues or Pull Requests" src="https://img.shields.io/github/issues/starstreammm/MediaHarbor">
  </div>
 
-## 0 Introduction
+## 1 Introduction
 
 The media on social platforms is unreliable, as it can be blocked, hidden, or removed. For our favorite content, getting a 404 is an extremely annoying thing.
 
-Mediaharbor is here to help you solve this issue. It downloads the media, as well as the description, avatar, and other information, and saves them locally. Unless your disk borked, no one can prevent you from accessing this pleasing content.
+MediaHarbor is here to help you solve this issue. It downloads the media, as well as the description, avatar, and other information, and saves them locally. Unless your disk borked, no one can prevent you from accessing this pleasing content.
 
-## 1 Features
+## 2 Features
 
 - Friendly WebUI interface and convenient installation with Docker.
 - Provide various levels of control precision, including post, account, creator, and collection.
 - Auto-sync accounts' content, automatically downloading new posts and recording profile changes.
 - Built with FastAPI, React & Vite, and MUI, providing modern and fast experiences.
 
-## 2 Support Platform
+## 3 Support Platform
 
 | Platform      | Supportable   |
 | ------------- | ------------- |
@@ -38,44 +37,66 @@ Mediaharbor is here to help you solve this issue. It downloads the media, as wel
 | Instagram     | Developing... |
 | YouTube       | Developing... |
 
-## 3 Installation
+## 4 Installation
 
-### 0 Docker Compose (Recommended)
+### 4.1 Docker Compose (Recommended)
 
-Use the [docer-compose.yml]((./docker-compose.yml)) in the repo.
+MediaHarbor can be deployed using [Docker Compose](./docker-compose.yaml). The provided configuration includes MediaHarbor, PostgreSQL, and Aria2 Pro, with optional Mihomo proxy support.
 
-Change the mount path to your own config. The paths that need to be changed are shown below:
+#### Configure Basic Settings
 
-| Path                      | Description                                                  |
-| ------------------------- | ------------------------------------------------------------ |
-| /path/to/data             | The data downloaded by Mediaharbor, including videos and photos from avatar to posts. |
-| /path/to/cache            | The path of log files, temparory hls files and config files. |
-| /path/to/postgres         | The database storage.                                        |
-| /path/to/certs (Optional) | The folder that contains your ssl certification and key.     |
+Open `compose.yaml` and locate the `x-config` section at the top:
 
-### 1 Local Installation
+##### Timezone
 
-1. Install `nginx` and `ffmpeg`.
-2. Download the [latest release](https://github.com/starstreammm/MediaHarbor/releases/latest/download/release.tar.gz).
-3. Copy the files under `/dist` to the specificd location in nginx.
-4. To install the necessary pip packages, run the command `pip install -r requirements.txt`.
-5. Start the backend api using `uvicorn main:app --host 0.0.0.0 --port 38888` under `/api`
-6. Run `./nginx_entrypoint.sh` to start nginx.
+Replace `Asia/Shanghai` with your preferred timezone, such as `UTC` or `America/New_York`.
 
-### 2 Develop Mode
+##### Security Token
+
+Replace `your-token` with a secure random token.
+
+You can generate one using OpenSSL:
 
 ```bash
-git clone --recurse-submodules https://github.com/starstreammm/MediaHarbor.git
-cd MediaHarbor
-npm i
-pip install -r requirements.txt
-npm run dev
-fastapi dev api/main.py --port 38888
+openssl rand -hex 32
 ```
 
-### 3 (Optional) Enable SSL Connection
+The token is shared across MediaHarbor, Aria2 RPC, and PostgreSQL. You only need to configure it once.
 
-The path `/path/to/certs` must be mounted. Inside the folder, the structure must be:
+> **Important:** Keep your token private. Do not use the default placeholder in production or commit your configured secrets to a public repository.
+
+#### Configure Storage
+
+MediaHarbor uses Docker volumes to persist downloaded files, cache, and database data.
+
+| Name     | Default                | Purpose                   |
+| -------- | ---------------------- | ------------------------- |
+| data     | Host (config required) | Media files and downloads |
+| cache    | Docker-managed volume  | Application cache         |
+| postgres | Docker-managed volume  | PostgreSQL database       |
+| certs    | Disabled               | Custom SSL certificates   |
+| mihomo   | Disabled               | Mihomo configuration      |
+
+#### (Optional) Enable SSL Connection
+
+To provide your own SSL certificates, uncomment the `certs` volume definition and configure its host directory.
+
+```yaml
+    certs:
+        driver: local
+        driver_opts:
+            type: none
+            o: bind
+            device: /path/to/certs
+```
+
+Then uncomment the corresponding mount under the `mediaharbor` service:
+
+```yaml
+- certs:/etc/nginx/certs:ro
+```
+
+Inside the folder, the structure must be:
 
 ```
 /path/to/certs/
@@ -83,7 +104,45 @@ The path `/path/to/certs` must be mounted. Inside the folder, the structure must
 	├── cert.key
 ```
 
-The entrypoint will automatically detect if the certificate and key exist and decide whether to use SSL connection.
+The program will automatically detect if the certificate and key exist and decide whether to use SSL connection.
+
+#### (Optional) Mihomo Proxy
+
+Mihomo is an optional proxy service.
+
+To enable it:
+
+1. Uncomment the `mihomo` volume definition and configure its storage location if needed.
+
+2. Uncomment the entire `mihomo` service under `services`.
+
+3. Place your Mihomo configuration in the mounted configuration directory.
+
+4. Configure MediaHarbor or other services to use the proxy as needed.
+
+> Enabling the Mihomo container does not automatically route MediaHarbor's traffic through the proxy.
+
+### 4.2 Local Installation
+
+1. Install `nginx` and `ffmpeg`.
+2. Download the [latest release](https://github.com/starstreammm/MediaHarbor/releases/latest/download/release.tar.gz).
+3. Copy the files under `/dist` to the specificd location in nginx.
+4. To install the necessary pip packages, run the command `uv sync --locked`.
+   Install the guest browser with `uv run python -m cloakbrowser install`; see [DTK setup](docs/douyin-tiktok.md) for system dependencies and pool configuration.
+5. Start the backend api using `uvicorn main:app --host 0.0.0.0 --port 38888` under `/src`
+6. Run `./nginx_entrypoint.sh` to start nginx.
+
+### 4.3 Develop Mode
+
+```bash
+git clone --recurse-submodules https://github.com/starstreammm/MediaHarbor.git
+cd MediaHarbor
+npm i
+uv sync --locked
+uv run python -m cloakbrowser install
+npm run dev
+uv run uvicorn main:app --app-dir src --reload --port 38888
+```
 
 ## Links
 
@@ -92,4 +151,3 @@ Douyin Api: [https://github.com/Evil0ctal/Douyin_TikTok_Download_API](https://gi
 FFmpeg: [https://ffmpeg.org](https://ffmpeg.org/)
 
 MUI: https://mui.com/material-ui/
-

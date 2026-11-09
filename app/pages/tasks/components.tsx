@@ -370,7 +370,7 @@ export function DetailError({ uid, detail, refetch }: { uid: number; detail: Que
                         onClick={() =>
                             retryTask(uid)
                                 .then((res) => {
-                                    pushTaskSuccess(`Task ${uid} retried successfully. New task UID: ${res}.`);
+                                    pushTaskSuccess(`Retry submitted for task ${uid}. New task UID: ${res}.`);
                                     refetch();
                                 })
                         }

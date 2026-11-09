@@ -44,7 +44,7 @@ export default function TasksPage() {
                 {([
                     ["Running", <PlayCircleRoundedIcon color="primary" />, "running"],
                     ["Error", <ErrorRoundedIcon color="error" />, "error"],
-                    ["Pending", <PauseCircleRoundedIcon />, "pending"],
+                    ["Pending", <PauseCircleRoundedIcon color="info" />, "pending"],
                     ["Success", <CheckCircleRoundedIcon color="success" />, "success"],
                 ] as [string, React.ReactNode, Status][]).map(([label, icon, state], index) => (
                     <Fragment key={index}>

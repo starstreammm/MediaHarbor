@@ -4,7 +4,7 @@ import type { TablePost } from "~/model/table";
 import { api } from "~/hooks/api";
 import { pushError } from "~/components/error_popout";
 import type { ApiPostInsert } from "~/model/api";
-import type { Platform } from "~/model/enum";
+import type { ApiUrlCheck } from "~/model/api";
 
 
 
@@ -53,17 +53,11 @@ export async function deletePost(uid: number) {
     }
 }
 
-export async function checkUrl(url: string) {
+export async function checkUrl(url: string, signal?: AbortSignal): Promise<ApiUrlCheck> {
     try {
-        const res = await api.get("/api/post/check", { searchParams: { url } }).json<[string, [Platform, string] | null]>();
-        if (res[0] === "true") {
-            return res[1] ? res[1][0] : "Unknown platform";
-        }
-        else {
-            return res[0];
-        }
+        return await api.get("/api/post/check", { searchParams: { url }, signal }).json<ApiUrlCheck>();
     } catch (error) {
-        return "Error checking URL: " + (error as Error).message;
+        return { status: "error", message: "Error checking URL: " + (error as Error).message };
     }
 }
 
